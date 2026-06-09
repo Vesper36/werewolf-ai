@@ -18,13 +18,17 @@ PERSONALITIES = [
     ("猥琐位", "少量保留，不轻易交底牌，喜欢留后手"),
     ("倒钩位", "狼牌时倾向站真预言家或打队友，追求深水生存"),
     ("悍跳位", "狼牌时敢起跳神职，编造警徽流和夜间信息"),
+    ("战术大师", "狼人时精通多套战术体系，能根据局势灵活切换悍跳/倒钩/深水"),
+    ("读心者", "擅长抿神，通过发言细节判断其他玩家底牌，准确率极高"),
+    ("煽动家", "发言极具煽动力，擅长带节奏、制造舆论风向"),
+    ("隐者", "极度低调但每轮发言都有干货，后期发力型选手"),
 ]
 
 DIFFICULTY_STYLE = {
     "novice": "入门难度：发言短，逻辑直接，允许明显失误，不使用复杂术语。",
     "basic": "基础难度：能站边、盘狼坑，但推理链不超过两层。",
     "advanced": "进阶难度：会关注票型、轮次、警徽流、倒钩与冲锋关系。",
-    "expert": "大神难度：接近高端赛事风格，会打反逻辑、做身份、抿神、倒钩、滴滴代跳和临场换打法。",
+    "expert": "大神难度：京城大师赛级别。精通悍跳/倒钩/深水/阴阳倒钩/滴滴代跳等全部战术体系。会抿神定位、位置学推演、构建多层级狼坑。发言有压迫感，逻辑链深度可达四层以上，能打反逻辑和临场换打法。",
 }
 
 
@@ -64,14 +68,138 @@ class AIAgentSession:
         team_line = ""
         if self.known_teammate_seats:
             team_line = f"你按规则只知道这些狼队友座位：{self.known_teammate_seats}。"
-        return (
+        base = (
             "你是一个狼人杀 AI 玩家，但你不是裁判。你必须像真人玩家一样只基于自己可见的信息发言，"
             "不能声称知道任何未公开身份，不能读取其他 AI 的私有思考。"
             f"你的座位是 {self.seat_number} 号，底牌是 {role_name}，阵营是 {self.faction.value}。{team_line}"
             f"你的固定人设是：{self.personality_name}，{self.personality_prompt}。"
-            f"{DIFFICULTY_STYLE.get(self.difficulty, DIFFICULTY_STYLE['basic'])}"
-            "发言要自然，有口语节奏，允许少量停顿词，但不要灌水。单次不超过 220 字。"
         )
+        if self.difficulty == "expert":
+            return self._expert_system_prompt(base)
+        return (
+            base
+            + DIFFICULTY_STYLE.get(self.difficulty, DIFFICULTY_STYLE['basic'])
+            + "发言要自然，有口语节奏，允许少量停顿词，但不要灌水。单次不超过 220 字。"
+        )
+
+    def _expert_role_tactics(self) -> str:
+        """返回专家难度的角色特定战术指南"""
+        is_wolf = self.faction == Faction.WOLF
+        is_seer_like = self.role in (Role.SEER, Role.PSYCHIC, Role.PURE_WHITE)
+        if is_wolf:
+            return """## 狼人战术体系
+
+### 悍跳流
+第一天跳预言家，编造完整的警徽流和查验逻辑。
+关键点：(1)警徽流要合理，先验警上后验警下；(2)金水发给好人建立信任；(3)查杀要敢于发，制造混乱；(4)被质疑时不要慌，用力度和逻辑压回去
+
+### 倒钩流
+攻击自己的狼队友来获取好人信任。
+关键点：(1)踩人要踩在逻辑点上，不能无脑踩；(2)不要过早暴露意图，先听发言再决定踩谁；(3)倒钩要深，不要轻易回头，除非狼队需要你冲锋；(4)倒钩时仍然要为狼队获取信息
+
+### 深水狼
+极度低调，发言短而"平民"，不主动带节奏。
+关键点：(1)发言要有"信息量不足"的平民感；(2)投票跟着逻辑走，不标新立异；(3)关键时刻（轮次紧张时）突然发力带队归票；(4)全程保持表水一致性，不要前后矛盾
+
+### 阴阳倒钩
+表面站边真预言家（阳面），暗中通过"提醒"好人注意某些细节来引导好人犯错（阴面）。
+关键点：(1)阳面要做得真实，真心实意帮真预言家分析；(2)阴面递的信息要"看似合理"但实际带偏方向；(3)不要被好人团队识破你的阴阳两面
+
+### 滴滴代跳
+让一个狼队友去悍跳吸引火力，核心狼藏在好人堆里。
+关键点：(1)悍跳队友要能撑住场子；(2)核心狼要积极站边真预言家建立好人面；(3)配合要默契但不能被看出是团队操作
+
+### 刀人优先级（夜间）
+- 第一优先：已跳明且有查验能力的神职（预言家/通灵师）
+- 第二优先：发言信息量大、像女巫/守卫的神职
+- 第三优先：发言逻辑清晰、带队能力强的平民
+- 避免刀：(1)狼队友；(2)被全场怀疑的玩家（留着抗推）；(3)可能自刀做身份时慎重评估
+
+### 白天行动策略
+- 如果夜间刀了预言家，白天要以"为什么预言家还活着"来质疑悍跳狼
+- 如果夜间平安夜，第一时间怀疑女巫救人/守卫守人，调整抿神方向
+- 投票时注意分散票型，避免形成明显的狼队统一投票"""
+        elif is_seer_like:
+            return """## 预言家/通灵师策略
+
+### 警上发言模板
+1. 报查验："我是预言家，昨晚查验了X号，身份是金水/查杀"
+2. 给警徽流："警徽流先验Y号，再验Z号"
+3. 解释警徽流逻辑："先验Y号是因为他警上发言XXX，再验Z号是因为他警下投票XXX"
+4. 号召站边："好人请站我这边，我给你们完整的逻辑链"
+
+### 查验策略
+- 首夜优先查验：警下（未上警）玩家，因为信息少、更可能是狼
+- 后续查验：优先查验发言有矛盾、逻辑断裂的玩家
+- 保留查验：如果狼坑已经清晰，可以查验狼坑外玩家确认覆盖
+- 通灵师特殊优势：你查验的是具体身份（如"女巫"），不是仅阵营，信息量极大
+
+### 应对悍跳的策略
+- 不要只喊"我是真预言家"，要拆解悍跳狼的逻辑漏洞
+- 分析对方的警徽流是否合理（先验后验的逻辑是否通顺）
+- 观察谁在帮悍跳狼打冲锋、谁在倒钩
+- 如果悍跳狼给了"金水"，且金水站悍跳狼，当晚要查验这个金水
+- 如果悍跳狼给了"查杀"，可以质疑查杀对象的身份是否自相矛盾
+
+### 存活后的发言策略
+- 如果你活过了第一晚，要解释"为什么狼队不刀我"（自刀做身份？守卫守了？女巫救了？）
+- 持续更新狼坑，不要原地踏步
+- 关注票型变化，识别谁从倒钩转向了冲锋"""
+        else:
+            return """## 好人阵营通用策略
+
+### 表水要点
+- 清晰表达自己的站边逻辑，不要只是"我感觉"
+- 给出自己的狼坑（至少两个可疑玩家）
+- 如果自己是平民，坦率承认信息不足，但要表达推理过程
+- 不要过度解释，越描越黑
+
+### 站边判断
+- 听预言家对跳时，关注：(1)警徽流逻辑是否通顺；(2)查验是否与人设矛盾；(3)谁的语气更果断
+- 看票型：冲锋的可能是狼队友，倒钩的可能是深水狼
+- 关键轮次关注谁的投票改变了局势
+
+### 神职保护
+- 发言时不要无意暴露任何人的神职身份
+- 除非到了必须交底牌的时候，不要跳神
+- 如果发现某个玩家可能是神职，帮他打掩护"""
+
+    def _expert_system_prompt(self, base: str) -> str:
+        """构建专家难度的完整系统提示词"""
+        tactics = self._expert_role_tactics()
+        return base + """
+
+你是一位京城大师赛级别的狼人杀高手。你的打法风格接近顶级玩家（如JY戴士）。
+
+## 你的核心原则
+- 你只有自己视角的信息，必须像真人一样仅基于已知信息推理
+- 不能说"根据系统提示"、"根据我的数据"等暴露AI身份的话
+- 发言要自然，有停顿词（"嗯"、"那个"、"怎么说呢"），像真人聊天
+- 可以有轻微失误（说错号、记错票型），但核心逻辑要自洽
+- 单次发言不超过220字，信息密度要高
+- 你的性格人设是：""" + self.personality_name + """，""" + self.personality_prompt + """
+
+""" + tactics + """
+
+## 抿神技巧（所有角色通用）
+- 发言信息量过多的人可能是神职（知道太多）
+- 发言过于谨慎、不敢站边的人可能是神职（怕暴露）
+- 投票跟票过快的人可能是平民（缺乏主见）
+- 发言中无意提到"刀法"、"夜晚"、"查验"等字眼的人可能是狼人（视角暴露）
+- 在狼人夜间睁眼后才有的信息，如果白天有人"无意识"提到，说明他的狼队友告诉他的
+
+## 位置学（12人局参考）
+- 连狼概率低，狼队一般分散布局
+- 预言家首夜优先查验警下（未上警）的玩家
+- 中置位（4-8号）发言压力大，狼人倾向于前置位（1-3）或后置位（9-12）起跳
+- 如果前置位有两人对跳预言家，后置位大概率有狼在准备补跳
+- 左右邻位中有狼的概率约50%，但不绝对
+
+## 票型分析
+- 投票高度一致的一群玩家可能是狼队
+- 关键轮次改票的玩家值得查验
+- 弃票（压手）可能是狼人不敢表态
+- 分票可能是狼队在混淆视听"""
 
     async def generate_speech(
         self,
@@ -252,27 +380,76 @@ class AIAgentSession:
     # ---- LLM决策辅助方法 ----
 
     def _build_night_action_prompt(self, role_name: str, visible: dict, alive_seats: list[int]) -> dict:
-        system = (
-            f"你是狼人杀中的{role_name}。你需要根据当前场况选择最佳行动目标。"
-            f"只能回复一个数字（座位号），不要回复其他内容。"
-            f"{DIFFICULTY_STYLE.get(self.difficulty, DIFFICULTY_STYLE['basic'])}"
-        )
         is_wolf = self.faction == Faction.WOLF
+        system_parts = [
+            f"你是狼人杀中的{role_name}。你需要根据当前场况选择最佳行动目标。",
+            f"只能回复一个数字（座位号），不要回复其他内容。",
+        ]
+        if self.difficulty == "expert":
+            system_parts.append(self._expert_night_strategy(role_name))
+        else:
+            system_parts.append(DIFFICULTY_STYLE.get(self.difficulty, DIFFICULTY_STYLE['basic']))
         if is_wolf and self.known_teammate_seats:
-            system += f"你不能选择狼队友：{self.known_teammate_seats}。"
+            system_parts.append(f"你不能选择狼队友：{self.known_teammate_seats}。")
+        system = "\n".join(system_parts)
+        candidates = [s for s in alive_seats if s not in (self.known_teammate_seats if is_wolf else [])]
         user = (
             f"当前场况: {visible.get('phase_label')}, 第{visible.get('day_number')}天\n"
             f"存活玩家座位号: {alive_seats}\n"
-            f"可选目标: {[s for s in alive_seats if s not in (self.known_teammate_seats if is_wolf else [])]}\n"
+            f"可选目标: {candidates}\n"
             f"你({self.seat_number}号)是{role_name}。请选择你的行动目标座位号："
         )
         return {"system": system, "user": user}
 
-    def _build_vote_prompt(self, visible: dict, alive_seats: list[int]) -> dict:
-        system = (
-            f"你是狼人杀玩家({self.seat_number}号)，阵营是{self.faction.value}，性格是{self.personality_name}。"
-            f"你需要投票放逐一名玩家。只能回复一个数字（座位号）。"
+    def _expert_night_strategy(self, role_name: str) -> str:
+        """返回专家难度的夜间行动策略指导"""
+        is_wolf = self.faction == Faction.WOLF
+        if is_wolf:
+            return (
+                "【狼人刀人策略】"
+                "优先刀已跳明神职的玩家（预言家>女巫>通灵师）。"
+                "如果没有明确神职信息，选发言逻辑最清晰的好人（可能是隐藏神职）。"
+                "不要刀全场都在怀疑的玩家（留着抗推）。"
+                "不要刀狼队友。"
+                "如果有平安夜，下次优先怀疑被守/被救的位置。"
+            )
+        role_str = str(self.role).lower()
+        if "seer" in role_str or "psychic" in role_str or "pure_white" in role_str:
+            return (
+                "【查验策略】"
+                "优先查验发言最少、信息最模糊的玩家（隐身狼）。"
+                "其次查验站边与你不同的玩家（可能是狼）。"
+                "如果前一天票型出现异常，优先查验改票/弃票的玩家。"
+                "不要查验已知身份或你自己。"
+            )
+        if "witch" in role_str:
+            return (
+                "【女巫用药策略】"
+                "解药：第一晚可以选择用药救人，但注意可能是狼自刀。"
+                "毒药：只在有较高把握时使用，优先毒杀悍跳狼或冲锋狼。"
+                "如果场上神职暴露多，解药优先留给预言家。"
+            )
+        if "guard" in role_str:
+            return (
+                "【守卫守护策略】"
+                "优先守护已跳明且重要的神职（预言家）。"
+                "如果预言家第一晚没死，狼队可能第二晚刀他，第二晚继续守。"
+                "但注意不能连续两晚守同一人，需要轮换。"
+                "在平安夜的下一晚，狼队大概率换目标。"
+            )
+        return (
+            f"【{role_name}行动策略】"
+            "根据你的角色能力和当前场况，选择最优目标。优先考虑对阵营最有价值的行动。"
         )
+
+    def _build_vote_prompt(self, visible: dict, alive_seats: list[int]) -> dict:
+        system_parts = [
+            f"你是狼人杀玩家({self.seat_number}号)，阵营是{self.faction.value}，性格是{self.personality_name}。",
+            f"你需要投票放逐一名玩家。只能回复一个数字（座位号）。",
+        ]
+        if self.difficulty == "expert":
+            system_parts.append(self._expert_vote_strategy())
+        system = "\n".join(system_parts)
         pressure = visible.get("pressure_seats", [])
         user = (
             f"存活玩家: {alive_seats}\n"
@@ -280,6 +457,27 @@ class AIAgentSession:
             + f"请选择你要投票的目标座位号："
         )
         return {"system": system, "user": user}
+
+    def _expert_vote_strategy(self) -> str:
+        """返回专家难度的投票策略指导"""
+        is_wolf = self.faction == Faction.WOLF
+        if is_wolf:
+            return (
+                "【狼人投票策略】"
+                "如果狼队友悍跳预言家且逻辑站得住，可以投票支持（冲锋）。"
+                "如果狼队友悍跳明显劣势，可以投票反对来做倒钩身份。"
+                "不要所有狼队友投同一个方向（会暴露团队）。"
+                "如果你在做深水狼，投票跟着场上主流逻辑走。"
+                "如果轮次紧张（只剩1-2狼），投票尽量不引人注意。"
+            )
+        return (
+            "【好人投票策略】"
+            "根据当天的发言逻辑和票型来判断该投谁。"
+            "如果你是神职且未跳身份，不要因为投票暴露。"
+            "关注谁在带节奏归票，如果归票逻辑有漏洞，可能是狼人在冲票。"
+            "如果你是平民，跟随你认为逻辑最清晰的神职/预言家的归票。"
+            "不要在不确定时弃票（压手），好人应该承担投票责任。"
+        )
 
     @staticmethod
     def _parse_target_from_response(response: str, alive_seats: list[int]) -> int | None:
