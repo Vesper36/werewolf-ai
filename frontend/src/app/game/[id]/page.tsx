@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useGameStore } from "@/stores/gameStore";
 import PlayerCard from "@/components/game/PlayerCard";
@@ -12,8 +12,12 @@ import { Loader2 } from "lucide-react";
 export default function GamePage() {
   const params = useParams();
   const gameId = params.id as string;
-  const { game, loading, fetchGame, submitNight, triggerAISpeeches, submitSpeech, submitVote, status } =
-    useGameStore();
+  const {
+    game, loading, fetchGame,
+    startNight, submitNightAction, startDay,
+    triggerAISpeeches, submitSpeech, submitVote, resolveVotes,
+    selfExplode, hunterShoot, knightDuel, status,
+  } = useGameStore();
 
   useEffect(() => {
     if (gameId) fetchGame(gameId);
@@ -27,28 +31,29 @@ export default function GamePage() {
     );
   }
 
-  const { phase_label, human, players, timeline, speeches, votes, game: gameState, board } = game;
-  const isGameOver = gameState.phase === "game_over";
-  const isNight = gameState.phase.startsWith("night") || gameState.phase === "role_dealt";
-  const isDiscuss = gameState.phase === "day_discuss";
-  const isVote = gameState.phase === "day_vote";
+  const { phase_label, human, players, timeline, speeches, game: gameState, board } = game;
+  const phase = gameState.phase;
+  const isGameOver = phase === "game_over";
+  const isNight = phase.startsWith("night") || phase === "role_dealt";
+  const isDay = phase.startsWith("day");
 
   return (
     <div className="max-w-7xl mx-auto px-4 py-4 flex flex-col lg:flex-row gap-4 h-[calc(100vh-56px)]">
-      {/* 左侧：主游戏区域 */}
+      {/* Main game area */}
       <div className="flex-1 flex flex-col gap-4 min-w-0">
-        {/* 阶段指示器 */}
+        {/* Phase indicator */}
         <div className="bg-gray-900 rounded-xl px-5 py-3 border border-gray-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <span className={`inline-block w-2.5 h-2.5 rounded-full ${isNight ? "bg-blue-500" : isGameOver ? "bg-red-500" : "bg-amber-500"} animate-pulse`} />
+            <span className={`inline-block w-2.5 h-2.5 rounded-full ${isNight ? "bg-blue-500" : isGameOver ? "bg-red-500" : "bg-amber-500"} ${!isGameOver ? "animate-pulse" : ""}`} />
             <span className="font-semibold text-lg">{phase_label}</span>
           </div>
           <div className="text-sm text-gray-400">
-            第 {gameState.day_number} 天 {board.has_police ? "· 有警长" : ""}
+            第 {gameState.day_number} 天{board.has_police && " · 有警长"}
+            {gameState.sheriff_id && ` · 警长: ${players.find((p) => p.id === gameState.sheriff_id)?.seat_number ?? "?"}号`}
           </div>
         </div>
 
-        {/* 玩家网格 */}
+        {/* Player grid */}
         <div className="bg-gray-900/50 rounded-xl p-4 border border-gray-800 flex-1">
           <div className="grid grid-cols-3 sm:grid-cols-4 gap-3">
             {players.map((p) => (
@@ -57,8 +62,8 @@ export default function GamePage() {
           </div>
         </div>
 
-        {/* 发言区域 */}
-        {(isDiscuss || isVote) && (
+        {/* Speech area */}
+        {isDay && speeches.length > 0 && (
           <div className="bg-gray-900 rounded-xl p-4 border border-gray-800 max-h-60 overflow-y-auto space-y-2">
             {speeches.slice(-8).map((s, i) => (
               <SpeechBubble
@@ -73,47 +78,51 @@ export default function GamePage() {
           </div>
         )}
 
-        {/* 操作面板 */}
+        {/* Action panel */}
         <ActionPanel
           game={game}
-          onSubmitNight={(seat) => submitNight(seat)}
+          loading={loading}
+          onStartNight={() => startNight()}
+          onSubmitNightAction={(actionType, targetSeat) => submitNightAction(actionType, targetSeat)}
+          onStartDay={() => startDay()}
           onTriggerAI={() => triggerAISpeeches()}
           onSubmitSpeech={(text) => submitSpeech(text)}
           onSubmitVote={(seat) => submitVote(seat)}
-          loading={loading}
+          onResolveVotes={() => resolveVotes()}
+          onSelfExplode={(seat) => selfExplode(seat)}
+          onHunterShoot={(seat) => hunterShoot(seat)}
+          onKnightDuel={(seat) => knightDuel(seat)}
         />
 
-        {/* 状态栏 */}
+        {/* Status bar */}
         <div className="text-center text-xs text-gray-500 py-1">{status}</div>
       </div>
 
-      {/* 右侧：时间线 */}
+      {/* Timeline sidebar */}
       <div className="w-full lg:w-80 flex-shrink-0">
         <Timeline items={timeline} />
       </div>
 
-      {/* 游戏结束弹窗 */}
+      {/* Game over overlay */}
       {isGameOver && (
         <div className="fixed inset-0 z-50 bg-black/70 flex items-center justify-center">
           <div className="bg-gray-900 rounded-2xl p-8 border border-amber-600 max-w-md w-full mx-4 text-center space-y-4">
             <h2 className="text-3xl font-bold text-amber-400">
-              {gameState.winner === "good" && "好人阵营获胜"}
-              {gameState.winner === "wolf" && "狼人阵营获胜"}
-              {gameState.winner === "third" && "第三方阵营获胜"}
-              {gameState.winner === "cursed_fox" && "咒狐获胜"}
+              {gameState.winner === "good" && "好人阵营获胜!"}
+              {gameState.winner === "wolf" && "狼人阵营获胜!"}
+              {gameState.winner === "third" && "第三方阵营获胜!"}
+              {gameState.winner === "cursed_fox" && "咒狐获胜!"}
             </h2>
             <div className="text-sm text-gray-400 space-y-1">
               {players.map((p) => (
-                <div key={p.id}>
-                  {p.seat_number}号 {p.name} -- {p.role ?? "未知"}
-                  {p.id === human?.id ? "（你）" : ""}
+                <div key={p.id} className={p.is_human ? "text-blue-300" : ""}>
+                  {p.seat_number}号 {p.name} -- {p.role_name ?? p.role ?? "?"}
+                  {p.is_human && "（你）"}
                 </div>
               ))}
             </div>
-            <a
-              href="/"
-              className="inline-block mt-4 px-6 py-2 bg-amber-600 hover:bg-amber-500 text-sm font-medium rounded-lg transition-colors"
-            >
+            <a href="/"
+              className="inline-block mt-4 px-6 py-2 bg-amber-600 hover:bg-amber-500 text-sm font-medium rounded-lg transition-colors">
               返回大厅
             </a>
           </div>

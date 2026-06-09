@@ -29,10 +29,12 @@ export default function Home() {
     setAiConfig,
     fetchBoards,
     createGame,
-    submitNight,
+    startNight,
+    submitNightAction,
     triggerAISpeeches,
     submitSpeech,
     submitVote,
+    resolveVotes,
     testConnection,
   } = useGameStore();
   const [showSettings, setShowSettings] = useState(false);
@@ -219,7 +221,7 @@ export default function Home() {
                   <option value="">选择目标座位</option>
                   {aliveTargets.map((player) => <option key={player.id} value={player.seat_number}>{player.seat_number}号 {player.name}</option>)}
                 </select>
-                <button onClick={() => submitNight(targetSeat)} disabled={loading || game.game.phase === "game_over"} className="bg-indigo-700 px-4 py-3 disabled:opacity-50"><Moon className="mr-2 inline" size={18} />结算夜晚</button>
+                <button onClick={() => startNight()} disabled={loading || game.game.phase === "game_over"} className="bg-indigo-700 px-4 py-3 disabled:opacity-50"><Moon className="mr-2 inline" size={18} />进入夜晚</button>
                 <button onClick={triggerAISpeeches} disabled={loading || game.game.phase === "game_over"} className="bg-stone-700 px-4 py-3 disabled:opacity-50"><Bot className="mr-2 inline" size={18} />AI 发言</button>
                 <button onClick={() => targetSeat && submitVote(targetSeat)} disabled={loading || !targetSeat || game.game.phase === "game_over"} className="bg-red-700 px-4 py-3 disabled:opacity-50"><Vote className="mr-2 inline" size={18} />投票</button>
               </div>
