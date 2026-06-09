@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from ..ai.provider import AIProviderConfig
 from ..services.game_service import game_service
+from .ws_manager import ws_manager
 
 
 class AIConfigRequest(BaseModel):
@@ -214,3 +215,22 @@ async def knight_duel(game_id: str, payload: TargetRequest) -> dict[str, Any]:
         return game_service.knight_duel(game_id, payload.target_seat)
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ---- WebSocket ----
+
+@app.websocket("/ws/game/{game_id}")
+async def game_websocket(websocket: WebSocket, game_id: str):
+    """游戏实时通信"""
+    await ws_manager.connect(game_id, websocket)
+    try:
+        while True:
+            # 接收客户端消息（心跳/确认等）
+            data = await websocket.receive_text()
+            # 当前只做心跳维持连接，消息交互通过REST
+            if data == "ping":
+                await ws_manager.send_personal(websocket, {"type": "pong"})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        ws_manager.disconnect(game_id, websocket)

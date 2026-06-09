@@ -3,11 +3,12 @@
 import { useEffect } from "react";
 import { useParams } from "next/navigation";
 import { useGameStore } from "@/stores/gameStore";
+import { gameSocket } from "@/services/websocket";
 import PlayerCard from "@/components/game/PlayerCard";
 import SpeechBubble from "@/components/game/SpeechBubble";
 import Timeline from "@/components/game/Timeline";
 import ActionPanel from "@/components/game/ActionPanel";
-import { Loader2 } from "lucide-react";
+import { Loader2, Wifi, WifiOff } from "lucide-react";
 
 export default function GamePage() {
   const params = useParams();
@@ -22,6 +23,21 @@ export default function GamePage() {
   useEffect(() => {
     if (gameId) fetchGame(gameId);
   }, [gameId, fetchGame]);
+
+  // WebSocket连接
+  useEffect(() => {
+    if (!gameId) return;
+    gameSocket.connect(gameId);
+    const unsub = gameSocket.onMessage((msg) => {
+      if (msg.type === "state_update" && msg.data) {
+        useGameStore.setState({ game: msg.data });
+      }
+    });
+    return () => {
+      unsub();
+      gameSocket.disconnect();
+    };
+  }, [gameId]);
 
   if (!game) {
     return (

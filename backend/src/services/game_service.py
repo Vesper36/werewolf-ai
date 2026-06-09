@@ -26,6 +26,7 @@ from ..models.game import (
 )
 from ..models.player import Player
 from ..models.role import Faction, ROLE_CONFIG, Role, get_role_display_name, is_wolf_team
+from ..api.ws_manager import ws_manager
 
 
 PHASE_LABELS = {
@@ -136,7 +137,22 @@ class GameService:
 
     def get_game(self, game_id: str) -> dict[str, Any]:
         runtime = self._get_runtime(game_id)
-        return self._runtime_to_dict(runtime)
+        result = self._runtime_to_dict(runtime)
+        # 通过WebSocket广播最新状态
+        asyncio.create_task(self._broadcast_state(game_id, result, runtime))
+        return result
+
+    async def _broadcast_state(
+        self, game_id: str, game_dict: dict[str, Any], runtime: GameRuntime,
+    ) -> None:
+        """广播游戏状态变更到WebSocket客户端"""
+        try:
+            await ws_manager.broadcast(game_id, {
+                "type": "state_update",
+                "data": game_dict,
+            })
+        except Exception:
+            pass  # WebSocket广播失败不阻塞游戏流程
 
     # ---- 夜晚流程 ----
 
