@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 
 from ..ai.provider import AIProviderConfig
 from ..services.game_service import game_service
+from ..tts import TTSConfig, TTSEngine
 from .ws_manager import ws_manager
 
 
@@ -213,6 +214,33 @@ async def knight_duel(game_id: str, payload: TargetRequest) -> dict[str, Any]:
     """骑士决斗"""
     try:
         return game_service.knight_duel(game_id, payload.target_seat)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ---- TTS 语音合成 ----
+
+class TTSRequest(BaseModel):
+    text: str
+    provider: str = "edge"
+    voice: str = "alloy"
+    speed: float = 1.0
+
+@app.post("/api/tts/synthesize")
+async def synthesize_speech(payload: TTSRequest):
+    """将文字转为语音音频"""
+    try:
+        config = TTSConfig(
+            provider=payload.provider,
+            voice=payload.voice,
+            speed=payload.speed,
+        )
+        engine = TTSEngine(config)
+        audio = await engine.synthesize(payload.text)
+        if audio is None:
+            raise HTTPException(status_code=500, detail="语音合成失败")
+        from fastapi.responses import Response
+        return Response(content=audio, media_type="audio/mpeg")
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
