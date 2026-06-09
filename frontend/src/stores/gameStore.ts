@@ -26,10 +26,23 @@ type GameState = {
   fetchBoards: () => Promise<void>;
   createGame: () => Promise<void>;
   fetchGame: (gameId: string) => Promise<void>;
-  submitNight: (targetSeat: number | null) => Promise<void>;
+
+  // Night flow
+  startNight: () => Promise<void>;
+  submitNightAction: (actionType: string, targetSeat: number | null, secondTargetSeat?: number | null) => Promise<void>;
+
+  // Day flow
+  startDay: () => Promise<void>;
   triggerAISpeeches: () => Promise<void>;
   submitSpeech: (text: string) => Promise<void>;
   submitVote: (targetSeat: number) => Promise<void>;
+  resolveVotes: () => Promise<void>;
+
+  // Special actions
+  selfExplode: (targetSeat: number | null) => Promise<void>;
+  hunterShoot: (targetSeat: number) => Promise<void>;
+  knightDuel: (targetSeat: number) => Promise<void>;
+
   testConnection: () => Promise<void>;
 };
 
@@ -63,11 +76,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   fetchBoards: async () => {
     try {
       const { boards } = await api.fetchBoards();
-      const defaultBoard =
-        boards.find((b) => b.id === "expert_mech_psychic") ?? boards[0];
       set({
         boards,
-        selectedBoardId: defaultBoard?.id ?? "",
+        selectedBoardId: boards.find((b) => b.id === "expert_mech_psychic")?.id ?? boards[0]?.id ?? "",
       });
     } catch (err) {
       set({ status: err instanceof Error ? err.message : "加载板子失败" });
@@ -78,12 +89,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     const { selectedBoardId, boards, difficulty, aiConfig } = get();
     const board = boards.find((b) => b.id === selectedBoardId);
     if (!board) return;
-
     set({ loading: true });
     try {
-      const humanRole = board.roles.some((r) => r.role === "seer")
-        ? "seer"
-        : "psychic";
+      const humanRole = board.roles.some((r) => r.role === "seer") ? "seer" : "psychic";
       const result = await api.createGame({
         board_id: board.id,
         difficulty,
@@ -91,11 +99,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         human_role: humanRole,
         ai: aiConfig,
       });
-      set({
-        game: result,
-        gameId: result.game.game_id,
-        status: "已开局，身份已发放",
-      });
+      set({ game: result, gameId: result.game.game_id, status: "身份已发放" });
     } catch (err) {
       set({ status: err instanceof Error ? err.message : "创建游戏失败" });
     } finally {
@@ -112,15 +116,47 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  submitNight: async (targetSeat) => {
+  // ---- 夜晚 ----
+
+  startNight: async () => {
     const { gameId } = get();
     if (!gameId) return;
     set({ loading: true });
     try {
-      const result = await api.resolveNight(gameId, targetSeat);
-      set({ game: result, status: "夜晚已结算" });
+      const result = await api.startNight(gameId);
+      set({ game: result, status: "进入夜晚" });
     } catch (err) {
-      set({ status: err instanceof Error ? err.message : "夜晚结算失败" });
+      set({ status: err instanceof Error ? err.message : "夜晚开始失败" });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  submitNightAction: async (actionType, targetSeat, secondTargetSeat) => {
+    const { gameId } = get();
+    if (!gameId) return;
+    set({ loading: true });
+    try {
+      const result = await api.submitNightAction(gameId, actionType, targetSeat, secondTargetSeat);
+      set({ game: result, status: "夜间行动已提交" });
+    } catch (err) {
+      set({ status: err instanceof Error ? err.message : "夜间行动失败" });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  // ---- 白天 ----
+
+  startDay: async () => {
+    const { gameId } = get();
+    if (!gameId) return;
+    set({ loading: true });
+    try {
+      const result = await api.startDay(gameId);
+      set({ game: result, status: "进入白天" });
+    } catch (err) {
+      set({ status: err instanceof Error ? err.message : "白天开始失败" });
     } finally {
       set({ loading: false });
     }
@@ -146,9 +182,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ loading: true });
     try {
       const result = await api.submitSpeech(gameId, text);
-      set({ game: result, status: "你的发言已发送" });
+      set({ game: result, status: "发言已发送" });
     } catch (err) {
-      set({ status: err instanceof Error ? err.message : "发言发送失败" });
+      set({ status: err instanceof Error ? err.message : "发言失败" });
     } finally {
       set({ loading: false });
     }
@@ -159,10 +195,68 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (!gameId) return;
     set({ loading: true });
     try {
-      const result = await api.resolveVote(gameId, targetSeat);
-      set({ game: result, status: "投票已结算" });
+      const result = await api.submitVote(gameId, targetSeat);
+      set({ game: result, status: "投票已提交" });
     } catch (err) {
       set({ status: err instanceof Error ? err.message : "投票失败" });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  resolveVotes: async () => {
+    const { gameId } = get();
+    if (!gameId) return;
+    set({ loading: true });
+    try {
+      const result = await api.resolveVotes(gameId);
+      set({ game: result, status: "投票已结算" });
+    } catch (err) {
+      set({ status: err instanceof Error ? err.message : "结算失败" });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  // ---- 特殊行动 ----
+
+  selfExplode: async (targetSeat) => {
+    const { gameId } = get();
+    if (!gameId) return;
+    set({ loading: true });
+    try {
+      const result = await api.selfExplode(gameId, targetSeat);
+      set({ game: result, status: "自爆" });
+    } catch (err) {
+      set({ status: err instanceof Error ? err.message : "自爆失败" });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  hunterShoot: async (targetSeat) => {
+    const { gameId } = get();
+    if (!gameId) return;
+    set({ loading: true });
+    try {
+      const result = await api.hunterShoot(gameId, targetSeat);
+      set({ game: result, status: "猎人开枪" });
+    } catch (err) {
+      set({ status: err instanceof Error ? err.message : "开枪失败" });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  knightDuel: async (targetSeat) => {
+    const { gameId } = get();
+    if (!gameId) return;
+    set({ loading: true });
+    try {
+      const result = await api.knightDuel(gameId, targetSeat);
+      set({ game: result, status: "骑士决斗" });
+    } catch (err) {
+      set({ status: err instanceof Error ? err.message : "决斗失败" });
     } finally {
       set({ loading: false });
     }

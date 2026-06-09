@@ -70,6 +70,15 @@ class ActionType(str, Enum):
     DREAM_WEAVER_TARGET = "dream_weaver_target"
     CROW_CURSE = "crow_curse"
     HUNTER_DEMON_HUNT = "hunter_demon_hunt"
+    UNDERTAKER_CHECK = "undertaker_check"
+    TREASURE_THIEF_SWITCH = "treasure_thief_switch"
+    HALFBLOOD_CHOOSE = "halfblood_choose"
+    PURE_WHITE_CHECK = "pure_white_check"
+    ALCHEMIST_ACTION = "alchemist_action"
+    WOLF_WITCH_CHECK = "wolf_witch_check"
+    SILENT_TUTOR_BLOCK = "silent_tutor_block"
+    DANCER_INVITE = "dancer_invite"
+    FAKE_FACE_SWAP = "fake_face_swap"
 
     # 白天行动
     SPEECH = "speech"
@@ -80,6 +89,7 @@ class ActionType(str, Enum):
     KNIGHT_DUEL = "knight_duel"
     HUNTER_SHOOT = "hunter_shoot"
     WOLF_SELF_EXPLODE = "wolf_self_explode"
+    IDIOT_REVEAL = "idiot_reveal"
 
     # 系统
     SKIP = "skip"
@@ -156,6 +166,15 @@ class GameState:
     guard_target: str | None = None
     seer_check_target: str | None = None
     seer_check_result: bool | None = None  # True=好人, False=狼人
+    nightmare_block_target: str | None = None
+    crow_curse_target: str | None = None
+    dream_weaver_target: str | None = None
+    magician_swap_a: str | None = None
+    magician_swap_b: str | None = None
+    dancer_guests: list[str] = field(default_factory=list)  # 舞者邀请的玩家
+
+    # 情侣
+    lover_pairs: list[tuple[str, str]] = field(default_factory=list)  # [(a_id, b_id), ...]
 
     # 投票
     vote_records: list[VoteRecord] = field(default_factory=list)
@@ -170,6 +189,9 @@ class GameState:
 
     # 自爆
     self_explode_count: int = 0
+
+    # 遗言池（本局还能使用的遗言次数）
+    remaining_last_words: int = 0
 
     # 胜利方
     winner: str | None = None  # "good" | "wolf" | "third" | "cursed_fox"

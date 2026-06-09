@@ -1,4 +1,4 @@
-"""FastAPI 入口。"""
+"""FastAPI 入口 — 完整游戏API"""
 
 from __future__ import annotations
 
@@ -30,7 +30,9 @@ class StartGameRequest(BaseModel):
 
 
 class NightActionRequest(BaseModel):
+    action_type: str = "seer_check"  # wolf_kill, seer_check, witch_save, etc.
     target_seat: int | None = None
+    second_target_seat: int | None = None
 
 
 class SpeechRequest(BaseModel):
@@ -41,19 +43,19 @@ class VoteRequest(BaseModel):
     target_seat: int
 
 
-app = FastAPI(title="AI狼人杀·大师竞技场", version="0.1.0")
+class TargetRequest(BaseModel):
+    target_seat: int
+
+
+app = FastAPI(title="AI狼人杀·大师竞技场", version="0.2.0")
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-        "http://localhost:5174",
-        "http://127.0.0.1:5174",
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "http://localhost:3001",
-        "http://127.0.0.1:3001",
+        "http://localhost:5173", "http://127.0.0.1:5173",
+        "http://localhost:5174", "http://127.0.0.1:5174",
+        "http://localhost:3000", "http://127.0.0.1:3000",
+        "http://localhost:3001", "http://127.0.0.1:3001",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -86,7 +88,7 @@ async def boards() -> dict[str, Any]:
 async def test_settings(payload: AIConfigRequest) -> dict[str, Any]:
     try:
         return await game_service.test_provider(_to_provider_config(payload))
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=f"连接失败: {exc}") from exc
 
 
@@ -100,7 +102,7 @@ async def create_game(payload: StartGameRequest) -> dict[str, Any]:
             human_role=payload.human_role,
             provider_config=_to_provider_config(payload.ai),
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
@@ -108,37 +110,107 @@ async def create_game(payload: StartGameRequest) -> dict[str, Any]:
 async def get_game(game_id: str) -> dict[str, Any]:
     try:
         return game_service.get_game(game_id)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
-@app.post("/api/games/{game_id}/night")
-async def resolve_night(game_id: str, payload: NightActionRequest) -> dict[str, Any]:
+# ---- 夜晚流程 ----
+
+@app.post("/api/games/{game_id}/night/start")
+async def start_night(game_id: str) -> dict[str, Any]:
+    """开始夜晚流程（首夜自动执行全部首夜阶段，非首夜执行常规夜晚）"""
     try:
-        return await game_service.resolve_night(game_id, payload.target_seat)
-    except Exception as exc:  # noqa: BLE001
+        runtime = game_service._get_runtime(game_id)
+        if runtime.state.is_first_night:
+            return await game_service.process_first_night(game_id)
+        return await game_service.process_night(game_id)
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
-@app.post("/api/games/{game_id}/ai-speeches")
-async def ai_speeches(game_id: str) -> dict[str, Any]:
+@app.post("/api/games/{game_id}/night/action")
+async def submit_night_action(game_id: str, payload: NightActionRequest) -> dict[str, Any]:
+    """人类玩家提交夜晚行动"""
     try:
-        return await game_service.run_ai_speeches(game_id)
-    except Exception as exc:  # noqa: BLE001
+        return await game_service.submit_human_night_action(
+            game_id, payload.action_type,
+            payload.target_seat, payload.second_target_seat,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ---- 白天流程 ----
+
+@app.post("/api/games/{game_id}/day/start")
+async def start_day(game_id: str) -> dict[str, Any]:
+    """开始白天流程"""
+    try:
+        return await game_service.process_day_phases(game_id)
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/games/{game_id}/speech")
 async def human_speech(game_id: str, payload: SpeechRequest) -> dict[str, Any]:
+    """人类玩家提交发言"""
     try:
         return game_service.submit_human_speech(game_id, payload.text)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/games/{game_id}/ai-speeches")
+async def ai_speeches(game_id: str) -> dict[str, Any]:
+    """生成AI发言"""
+    try:
+        return await game_service.run_ai_speeches(game_id)
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @app.post("/api/games/{game_id}/vote")
-async def vote(game_id: str, payload: VoteRequest) -> dict[str, Any]:
+async def human_vote(game_id: str, payload: VoteRequest) -> dict[str, Any]:
+    """人类玩家提交投票"""
     try:
-        return game_service.resolve_vote(game_id, payload.target_seat)
-    except Exception as exc:  # noqa: BLE001
+        return game_service.submit_human_vote(game_id, payload.target_seat)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/games/{game_id}/votes/resolve")
+async def resolve_votes(game_id: str) -> dict[str, Any]:
+    """结算所有AI投票并处理放逐结果"""
+    try:
+        return await game_service.resolve_votes(game_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+# ---- 特殊行动 ----
+
+@app.post("/api/games/{game_id}/self-explode")
+async def self_explode(game_id: str, payload: TargetRequest) -> dict[str, Any]:
+    """狼人自爆"""
+    try:
+        return game_service.self_explode(game_id, payload.target_seat)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/games/{game_id}/hunter-shoot")
+async def hunter_shoot(game_id: str, payload: TargetRequest) -> dict[str, Any]:
+    """猎人开枪"""
+    try:
+        return game_service.hunter_shoot(game_id, payload.target_seat)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
+@app.post("/api/games/{game_id}/knight-duel")
+async def knight_duel(game_id: str, payload: TargetRequest) -> dict[str, Any]:
+    """骑士决斗"""
+    try:
+        return game_service.knight_duel(game_id, payload.target_seat)
+    except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

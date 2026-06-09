@@ -76,6 +76,9 @@ class Role(str, Enum):
     THIEF = "thief"               # 盗贼
     WILD_CHILD = "wild_child"     # 野孩子
     TREASURE_THIEF = "treasure_thief"  # 盗宝大师
+    DANCER = "dancer"             # 舞者
+    MUTE_ELDER = "mute_elder"     # 禁言长老
+    BEAR = "bear"                 # 熊（咆哮判定）
 
 
 # 角色属性配置
@@ -426,6 +429,27 @@ ROLE_CONFIG: dict[Role, dict] = {
         "display_name": "盗宝大师",
         "description": "持有三张身份牌的能力",
         "night_active": True,
+    },
+    Role.DANCER: {
+        "faction": Faction.GOOD,
+        "category": RoleCategory.GOD,
+        "display_name": "舞者",
+        "description": "每夜可选三名未进舞池玩家，若恰好一人面具不同则其出局",
+        "night_active": True,
+    },
+    Role.MUTE_ELDER: {
+        "faction": Faction.GOOD,
+        "category": RoleCategory.GOD,
+        "display_name": "禁言长老",
+        "description": "白天可禁言一名玩家，使其在发言阶段不可发言",
+        "night_active": False,
+    },
+    Role.BEAR: {
+        "faction": Faction.GOOD,
+        "category": RoleCategory.GOD,
+        "display_name": "熊",
+        "description": "不睁眼神职，白天若左右有狼则咆哮",
+        "night_active": False,
     },
 }
 

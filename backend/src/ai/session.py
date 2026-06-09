@@ -106,27 +106,218 @@ class AIAgentSession:
         self._remember(text)
         return text
 
-    def choose_vote(self, visible_state: dict[str, Any]) -> int:
-        alive_seats = [p["seat_number"] for p in visible_state["alive_players"] if p["seat_number"] != self.seat_number]
+    async def choose_night_target_llm(
+        self, visible_state: dict[str, Any],
+        provider_config: AIProviderConfig, llm: LLMClient,
+    ) -> int | None:
+        """LLM驱动的夜晚目标选择"""
+        alive_seats = [
+            p["seat_number"] for p in visible_state["alive_players"]
+            if p["seat_number"] != self.seat_number
+        ]
+        if not alive_seats:
+            return None
+
+        if not provider_config.enabled:
+            return self._fallback_night_target(visible_state, alive_seats)
+
+        try:
+            role_name = get_role_display_name(self.role)
+            prompt = self._build_night_action_prompt(role_name, visible_state, alive_seats)
+            response = await llm.chat(
+                provider_config,
+                [{"role": "system", "content": prompt["system"]},
+                 {"role": "user", "content": prompt["user"]}],
+                max_tokens=50,
+            )
+            target = self._parse_target_from_response(response, alive_seats)
+            if target is not None:
+                return target
+        except Exception:
+            self.api_failures += 1
+        return self._fallback_night_target(visible_state, alive_seats)
+
+    async def choose_vote_llm(
+        self, visible_state: dict[str, Any],
+        provider_config: AIProviderConfig, llm: LLMClient,
+    ) -> int:
+        """LLM驱动的投票选择"""
+        alive_seats = [
+            p["seat_number"] for p in visible_state["alive_players"]
+            if p["seat_number"] != self.seat_number
+        ]
         if not alive_seats:
             return self.seat_number
-        pressure = visible_state.get("pressure_seats", [])
-        legal_pressure = [seat for seat in pressure if seat in alive_seats]
-        if legal_pressure and self.difficulty in {"advanced", "expert"}:
-            return random.choice(legal_pressure)
-        if self.faction == Faction.WOLF:
-            non_teammates = [seat for seat in alive_seats if seat not in self.known_teammate_seats]
-            if non_teammates:
-                return random.choice(non_teammates)
-        return random.choice(alive_seats)
 
-    def choose_night_target(self, visible_state: dict[str, Any]) -> int | None:
+        if not provider_config.enabled:
+            return self._fallback_vote(visible_state, alive_seats)
+
+        try:
+            prompt = self._build_vote_prompt(visible_state, alive_seats)
+            response = await llm.chat(
+                provider_config,
+                [{"role": "system", "content": prompt["system"]},
+                 {"role": "user", "content": prompt["user"]}],
+                max_tokens=30,
+            )
+            target = self._parse_target_from_response(response, alive_seats)
+            if target is not None:
+                return target
+        except Exception:
+            self.api_failures += 1
+        return self._fallback_vote(visible_state, alive_seats)
+
+    def generate_action(self, visible_state: dict[str, Any], action_type: str) -> dict[str, Any] | None:
+        """生成夜间行动 -- 大神难度使用更智能的策略，低难度使用简单启发式。
+
+        返回 None 表示跳过该阶段。
+        action_type: "wolf_kill" | "seer_check" | "witch_action" | "guard_protect" | ...
+        """
         alive_seats = [p["seat_number"] for p in visible_state["alive_players"] if p["seat_number"] != self.seat_number]
         if not alive_seats:
             return None
-        if self.faction == Faction.WOLF:
+
+        is_expert = self.difficulty == "expert"
+        pressure_seats = visible_state.get("pressure_seats", [])
+
+        if action_type == "wolf_kill":
+            # 狼人杀：避免杀队友，优先杀疑似神职
             candidates = [seat for seat in alive_seats if seat not in self.known_teammate_seats]
+            if not candidates:
+                candidates = alive_seats
+            if is_expert:
+                # 大神难度：优先杀压力位（疑似神职），其次随机
+                smart_targets = [s for s in pressure_seats if s in candidates]
+                return {"target_seat": random.choice(smart_targets or candidates), "action": "kill"}
+            return {"target_seat": random.choice(candidates), "action": "kill"}
+
+        elif action_type == "seer_check":
+            # 预言家/通灵师查验：避免查自己
+            if is_expert:
+                # 大神：优先查发言少的、可疑的、或压力位
+                suspicious = [s for s in pressure_seats if s in alive_seats]
+                if suspicious:
+                    return {"target_seat": random.choice(suspicious), "action": "check"}
+            return {"target_seat": random.choice(alive_seats), "action": "check"}
+
+        elif action_type == "witch_action":
+            # 女巫：综合判断是否使用药水
+            last_deaths = visible_state.get("last_deaths", [])
+            if is_expert:
+                # 大神：根据场上形势判断
+                if self.faction == Faction.WOLF:
+                    # 狼女巫变体：不在本实现考虑范围
+                    pass
+                # 好人女巫：如果有倒牌且是好人，可能救；否则倾向不救或毒可疑玩家
+                if last_deaths and random.random() < 0.6:
+                    # 倾向于使用解药
+                    return {"action": "save", "target_seat": last_deaths[0] if isinstance(last_deaths[0], int) else None}
+                # 有 30% 概率毒可疑玩家
+                poison_candidates = [s for s in pressure_seats if s in alive_seats]
+                if poison_candidates and random.random() < 0.3:
+                    return {"action": "poison", "target_seat": random.choice(poison_candidates)}
+                return {"action": "skip", "target_seat": None}
+            else:
+                # 低难度：简单策略
+                return {"action": "skip", "target_seat": None}
+
+        elif action_type == "guard_protect":
+            # 守卫：优先守护疑似神职或自己
+            if is_expert:
+                if random.random() < 0.5:
+                    return {"target_seat": self.seat_number, "action": "protect"}  # 自守
+                smart = [s for s in pressure_seats if s in alive_seats]
+                if smart:
+                    return {"target_seat": random.choice(smart), "action": "protect"}
+            return {"target_seat": random.choice(alive_seats), "action": "protect"}
+
+        else:
+            # 其他角色：简单随机选择
+            return {"target_seat": random.choice(alive_seats), "action": action_type}
+
+    # ---- 向后兼容的同步封装 (GameService调用时使用) ----
+
+    def choose_night_target(self, visible_state: dict[str, Any]) -> int | None:
+        return self._fallback_night_target(visible_state, [
+            p["seat_number"] for p in visible_state["alive_players"]
+            if p["seat_number"] != self.seat_number
+        ])
+
+    def choose_vote(self, visible_state: dict[str, Any]) -> int:
+        return self._fallback_vote(visible_state, [
+            p["seat_number"] for p in visible_state["alive_players"]
+            if p["seat_number"] != self.seat_number
+        ])
+
+    # ---- LLM决策辅助方法 ----
+
+    def _build_night_action_prompt(self, role_name: str, visible: dict, alive_seats: list[int]) -> dict:
+        system = (
+            f"你是狼人杀中的{role_name}。你需要根据当前场况选择最佳行动目标。"
+            f"只能回复一个数字（座位号），不要回复其他内容。"
+            f"{DIFFICULTY_STYLE.get(self.difficulty, DIFFICULTY_STYLE['basic'])}"
+        )
+        is_wolf = self.faction == Faction.WOLF
+        if is_wolf and self.known_teammate_seats:
+            system += f"你不能选择狼队友：{self.known_teammate_seats}。"
+        user = (
+            f"当前场况: {visible.get('phase_label')}, 第{visible.get('day_number')}天\n"
+            f"存活玩家座位号: {alive_seats}\n"
+            f"可选目标: {[s for s in alive_seats if s not in (self.known_teammate_seats if is_wolf else [])]}\n"
+            f"你({self.seat_number}号)是{role_name}。请选择你的行动目标座位号："
+        )
+        return {"system": system, "user": user}
+
+    def _build_vote_prompt(self, visible: dict, alive_seats: list[int]) -> dict:
+        system = (
+            f"你是狼人杀玩家({self.seat_number}号)，阵营是{self.faction.value}，性格是{self.personality_name}。"
+            f"你需要投票放逐一名玩家。只能回复一个数字（座位号）。"
+        )
+        pressure = visible.get("pressure_seats", [])
+        user = (
+            f"存活玩家: {alive_seats}\n"
+            + (f"当前被提及/施压的位置: {pressure}\n" if pressure else "")
+            + f"请选择你要投票的目标座位号："
+        )
+        return {"system": system, "user": user}
+
+    @staticmethod
+    def _parse_target_from_response(response: str, alive_seats: list[int]) -> int | None:
+        """从LLM回复中解析目标座位号"""
+        import re
+        numbers = re.findall(r'\d+', response)
+        for num_str in numbers:
+            seat = int(num_str)
+            if seat in alive_seats:
+                return seat
+        return None
+
+    def _fallback_night_target(self, visible: dict, alive_seats: list[int]) -> int | None:
+        """夜晚目标离线降级策略"""
+        if not alive_seats:
+            return None
+        if self.faction == Faction.WOLF:
+            candidates = [s for s in alive_seats if s not in self.known_teammate_seats]
             return random.choice(candidates or alive_seats)
+        # 神职：优先选压力位
+        pressure = visible.get("pressure_seats", [])
+        smart = [s for s in pressure if s in alive_seats]
+        if smart and self.difficulty in {"advanced", "expert"}:
+            return random.choice(smart)
+        return random.choice(alive_seats)
+
+    def _fallback_vote(self, visible: dict, alive_seats: list[int]) -> int:
+        """投票离线降级策略"""
+        if not alive_seats:
+            return self.seat_number
+        pressure = visible.get("pressure_seats", [])
+        legal = [s for s in pressure if s in alive_seats]
+        if legal and self.difficulty in {"advanced", "expert"}:
+            return random.choice(legal)
+        if self.faction == Faction.WOLF:
+            non_teammates = [s for s in alive_seats if s not in self.known_teammate_seats]
+            if non_teammates:
+                return random.choice(non_teammates)
         return random.choice(alive_seats)
 
     def _fallback_speech(self, visible_state: dict[str, Any]) -> str:

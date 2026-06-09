@@ -112,4 +112,6 @@ export type GameResponse = {
     has_api_key: boolean;
   };
   new_speeches?: Speech[];
+  pending_human_prompt?: string | null;
+  pending_human_action_type?: string | null;
 };
