@@ -171,7 +171,7 @@ export default function Home() {
         {!game ? (
           <main className="grid gap-5 lg:grid-cols-[210px_minmax(0,1fr)_360px]">
             <aside className="grid content-start gap-3">
-              {difficulties.map((item) => (
+              {DIFFICULTIES.map((item) => (
                 <button key={item.id} onClick={() => setDifficulty(item.id)} className={`border p-4 text-left ${difficulty === item.id ? "border-red-500 bg-red-950/40" : "border-stone-800 bg-[#17191f]"}`}>
                   <strong className="block text-xl">{item.title}</strong>
                   <span className="text-sm text-stone-400">{item.desc}</span>
