@@ -263,84 +263,15 @@ export default function Home() {
             </aside>
           </main>
         ) : (
-          <main className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_430px]">
-            <section className="border border-stone-800 bg-[#17191f] p-5">
-              <div className="mb-4 flex flex-wrap items-center justify-between gap-3 border-b border-stone-800 pb-3">
-                <span>第 {game.game.day_number} 天</span>
-                <strong className="text-2xl">{game.phase_label}</strong>
-                <span>{game.game.winner ? `胜利：${game.game.winner}` : "对局进行中"}</span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3 md:grid-cols-4 xl:grid-cols-6">
-                {game.players.map((player) => (
-                  <PlayerCard
-                    key={player.id}
-                    player={player}
-                    isSelected={targetSeat === player.seat_number}
-                    onClick={() => setTargetSeat(player.seat_number)}
-                    showRole={player.is_human || game.game.phase === "game_over"}
-                  />
-                ))}
-              </div>
-
-              <div className="mt-5 grid gap-3 border-t border-stone-800 pt-4 md:grid-cols-[minmax(180px,1fr)_auto_auto_auto]">
-                <select className="bg-stone-950 p-3" value={targetSeat ?? ""} onChange={(e) => setTargetSeat(e.target.value ? Number(e.target.value) : null)}>
-                  <option value="">选择目标座位</option>
-                  {aliveTargets.map((player) => <option key={player.id} value={player.seat_number}>{player.seat_number}号 {player.name}</option>)}
-                </select>
-                <button onClick={() => startNight()} disabled={loading || !["role_dealt", "night_start"].includes(game.game.phase)} className="bg-indigo-700 px-4 py-3 disabled:opacity-50"><Moon className="mr-2 inline" size={18} />进入夜晚</button>
-                <button onClick={startDay} disabled={loading || !["day_death_announce", "day_discuss"].includes(game.game.phase)} className="bg-indigo-600 px-4 py-3 disabled:opacity-50"><Moon className="mr-2 inline" size={18} />开始白天</button>
-                <button onClick={triggerAISpeeches} disabled={loading || game.game.phase !== "day_discuss"} className="bg-stone-700 px-4 py-3 disabled:opacity-50"><Bot className="mr-2 inline" size={18} />AI 发言</button>
-                <button onClick={startVote} disabled={loading || game.game.phase !== "day_discuss"} className="bg-amber-600 px-4 py-3 disabled:opacity-50"><Vote className="mr-2 inline" size={18} />进入投票</button>
-                <button onClick={() => targetSeat && submitVote(targetSeat)} disabled={loading || !targetSeat || game.game.phase !== "day_vote"} className="bg-amber-700 px-4 py-3 disabled:opacity-50"><Vote className="mr-2 inline" size={18} />投票</button>
-                <button onClick={resolveVotes} disabled={loading || game.game.phase !== "day_vote"} className="bg-red-700 px-4 py-3 disabled:opacity-50"><Vote className="mr-2 inline" size={18} />结算投票</button>
-              </div>
-
-              {game.pending_human_prompt && (
-                <div className="mt-3 border border-indigo-700 bg-indigo-950/40 p-3 text-sm text-indigo-200">
-                  {game.pending_human_prompt}
-                </div>
-              )}
-
-              {game.last_check && (
-                <div className="mt-3 border border-amber-700 bg-amber-950/40 p-3 text-sm text-amber-100">
-                  <ShieldQuestion className="mr-2 inline" size={16} />
-                  {game.last_check.target_seat}号查验：{game.last_check.result === "good" ? "好人" : "狼人"}{game.last_check.role ? ` / ${game.last_check.role}` : ""}
-                </div>
-              )}
-
-              <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto_auto]">
-                <textarea className="min-h-24 resize-y bg-stone-950 p-3" value={speechText} onChange={(e) => setSpeechText(e.target.value)} placeholder="输入你的发言，或用语音识别填入" />
-                <button onClick={useBrowserSpeech} className="bg-stone-700 px-4 py-3"><Mic className="mr-2 inline" size={18} />语音</button>
-                <button onClick={sendSpeech} disabled={loading || !speechText.trim()} className="bg-red-700 px-4 py-3 disabled:opacity-50"><Send className="mr-2 inline" size={18} />发送</button>
-              </div>
-            </section>
-
-            <aside className="grid content-start gap-4">
-              <section className="border border-stone-800 bg-[#17191f] p-4">
-                <h2 className="mb-3 text-xl font-semibold">逐字发言</h2>
-                <div className="grid max-h-[440px] gap-3 overflow-y-auto pr-1">
-                  {game.speeches.length === 0 ? <p className="text-sm text-stone-500">等待第一轮发言</p> : game.speeches.map((speech) => (
-                    <SpeechBubble key={`${speech.player_id}-${speech.timestamp}`} text={speech.text} charsPerSecond={speech.typing_cps} seatNumber={speech.seat_number} name={speech.name} isHuman={speech.player_id === game.human?.id} />
-                  ))}
-                </div>
-              </section>
-              <section className="border border-stone-800 bg-[#17191f] p-4">
-                <h2 className="mb-3 text-xl font-semibold">AI 隔离线程</h2>
-                <div className="grid grid-cols-2 gap-2">
-                  {game.agents.map((agent) => (
-                    <div key={agent.thread_id} className="min-w-0 border border-stone-800 bg-stone-950 p-2 text-sm">
-                      <strong>{agent.seat_number}号 {agent.personality}</strong>
-                      <p className="truncate text-xs text-stone-500">{agent.thread_id}</p>
-                    </div>
-                  ))}
-                </div>
-              </section>
-              <section className="h-[260px] border border-stone-800 bg-[#17191f] p-4">
-                <h2 className="mb-3 text-xl font-semibold">日志</h2>
-                <Timeline items={game.timeline} />
-              </section>
-            </aside>
+          <main className="min-h-[60vh] flex items-center justify-center border border-stone-800 bg-[#17191f] p-10">
+            <div className="text-center">
+              <Swords size={48} className="text-red-400 mx-auto mb-4" />
+              <p className="text-xl text-stone-300 mb-2">游戏进行中</p>
+              <p className="text-sm text-stone-500 mb-4">{game.board.name} / {game.phase_label}</p>
+              <a href={`/game/${game.game.game_id}`} className="inline-block bg-red-700 px-6 py-3 font-medium hover:bg-red-600 text-white">
+                进入游戏
+              </a>
+            </div>
           </main>
         )}
       </div>
