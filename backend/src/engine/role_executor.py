@@ -64,7 +64,9 @@ class SeerExecutor(RoleExecutor):
 @RoleExecutorRegistry.register(Role.PSYCHIC)
 class PsychicExecutor(RoleExecutor):
     async def execute_night(self, state: GameState, player: Player, action: Action) -> None:
-        if action.action_type != ActionType.PSYCHIC_CHECK or not action.target_id:
+        if action.action_type not in {ActionType.PSYCHIC_CHECK, ActionType.SEER_CHECK}:
+            return
+        if not action.target_id:
             return
         target = state.get_player(action.target_id)
         if not target or not target.is_alive:
@@ -179,7 +181,8 @@ class CrowExecutor(RoleExecutor):
 class PureWhiteExecutor(RoleExecutor):
     """纯白之女：每晚查验一名玩家的具体身份"""
     async def execute_night(self, state: GameState, player: Player, action: Action) -> None:
-        if action.action_type != ActionType.PURE_WHITE_CHECK or not action.target_id:
+        if action.action_type not in {ActionType.PURE_WHITE_CHECK, ActionType.SEER_CHECK}:
+            return
             return
         target = state.get_player(action.target_id)
         if not target or not target.is_alive:

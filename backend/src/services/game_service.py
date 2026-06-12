@@ -432,6 +432,7 @@ class GameService:
         queue.append((GamePhase.NIGHT_WOLF_KILL, None, ActionType.WOLF_KILL, "选择袭击目标"))
         queue.append((GamePhase.NIGHT_GARGOYLE, Role.GARGOYLE, ActionType.GARGOYLE_CHECK, "查验一名玩家"))
         queue.append((GamePhase.NIGHT_WITCH, Role.WITCH, ActionType.WITCH_SAVE, "是否使用解药"))
+        queue.append((GamePhase.NIGHT_WITCH, Role.WITCH, ActionType.WITCH_POISON, "是否使用毒药"))
         queue.append((GamePhase.NIGHT_GUARD, Role.GUARD, ActionType.GUARD_PROTECT, "选择守护目标"))
         queue.append((GamePhase.NIGHT_SEER, None, ActionType.SEER_CHECK, "选择查验目标"))
         # 一次性角色（仅首夜）
@@ -470,6 +471,7 @@ class GameService:
         if self._has_role_alive(state, Role.GARGOYLE):
             queue.append((GamePhase.NIGHT_GARGOYLE, Role.GARGOYLE, ActionType.GARGOYLE_CHECK, "查验一名玩家"))
         queue.append((GamePhase.NIGHT_WITCH, Role.WITCH, ActionType.WITCH_SAVE, "是否使用解药"))
+        queue.append((GamePhase.NIGHT_WITCH, Role.WITCH, ActionType.WITCH_POISON, "是否使用毒药"))
         queue.append((GamePhase.NIGHT_GUARD, Role.GUARD, ActionType.GUARD_PROTECT, "选择守护目标"))
         queue.append((GamePhase.NIGHT_SEER, None, ActionType.SEER_CHECK, "选择查验目标"))
         if self._has_role_alive(state, Role.DREAM_WEAVER):
@@ -517,6 +519,18 @@ class GameService:
 
             else:
                 # 单角色阶段
+                # 跳过女巫无药阶段
+                if action_type == ActionType.WITCH_SAVE and not any(
+                    p.has_antidote for p in state.get_alive_players() if p.role == Role.WITCH
+                ):
+                    runtime.night_phase_index += 1
+                    continue
+                if action_type == ActionType.WITCH_POISON and not any(
+                    p.has_poison for p in state.get_alive_players() if p.role == Role.WITCH
+                ):
+                    runtime.night_phase_index += 1
+                    continue
+
                 human_needs_act = False
                 for p in state.get_alive_players():
                     if p.role != role:
