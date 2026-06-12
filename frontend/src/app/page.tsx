@@ -1,19 +1,26 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Gauge, Mic, Moon, Play, Radio, Send, Settings, ShieldQuestion, Swords, Vote } from "lucide-react";
+import { Bot, Crown, Gauge, Mic, Moon, Play, Radio, Send, Settings, Shield, ShieldQuestion, Star, Swords, Zap } from "lucide-react";
 import PlayerCard from "@/components/game/PlayerCard";
 import SpeechBubble from "@/components/game/SpeechBubble";
 import Timeline from "@/components/game/Timeline";
 import { useGameStore } from "@/stores/gameStore";
 import type { Difficulty } from "@/types/game";
 
-const difficulties: { id: Difficulty; title: string; desc: string }[] = [
-  { id: "novice", title: "入门", desc: "9人不上警，练基础发言" },
-  { id: "basic", title: "基础", desc: "12人标准，警徽流入门" },
-  { id: "advanced", title: "进阶", desc: "骑士、咒狐、票型压力" },
-  { id: "expert", title: "大神", desc: "京城大师赛风格花板子" },
+const DIFFICULTIES = [
+  { id: "novice" as Difficulty, title: "入门", desc: "9人不上警，练基础发言", Icon: Star, color: "emerald", players: "9人", police: false },
+  { id: "basic" as Difficulty, title: "基础", desc: "12人标准局，警徽流入门", Icon: Shield, color: "blue", players: "12人", police: true },
+  { id: "advanced" as Difficulty, title: "进阶", desc: "骑士、咒狐、票型压力", Icon: Zap, color: "purple", players: "12人", police: true },
+  { id: "expert" as Difficulty, title: "大神", desc: "京城大师赛风格花板子", Icon: Crown, color: "amber", players: "12人", police: true },
 ];
+
+const CL: Record<string, { ring: string; bg: string; border: string; text: string }> = {
+  emerald: { ring: "ring-emerald-400", bg: "bg-emerald-950/40", border: "border-emerald-500", text: "text-emerald-400" },
+  blue: { ring: "ring-blue-400", bg: "bg-blue-950/40", border: "border-blue-500", text: "text-blue-400" },
+  purple: { ring: "ring-purple-400", bg: "bg-purple-950/40", border: "border-purple-500", text: "text-purple-400" },
+  amber: { ring: "ring-amber-400", bg: "bg-amber-950/40", border: "border-amber-500", text: "text-amber-400" },
+};
 
 export default function Home() {
   const {
@@ -30,11 +37,13 @@ export default function Home() {
     fetchBoards,
     createGame,
     startNight,
+    startDay,
     submitNightAction,
     triggerAISpeeches,
     submitSpeech,
     submitVote,
     resolveVotes,
+    startVote,
     testConnection,
   } = useGameStore();
   const [showSettings, setShowSettings] = useState(false);
@@ -76,6 +85,15 @@ export default function Home() {
       });
     window.advanceTime = () => undefined;
   }, [game, selectedBoard?.name, status]);
+
+  async function handleStartGame() {
+    if (!selectedBoard || loading) return;
+    await createGame();
+    const g = useGameStore.getState().game;
+    if (g?.game?.game_id) {
+      window.location.href = "/game/" + g.game.game_id;
+    }
+  }
 
   function sendSpeech() {
     const text = speechText.trim();
@@ -224,6 +242,7 @@ export default function Home() {
                 <button onClick={() => startNight()} disabled={loading || !["role_dealt", "night_start"].includes(game.game.phase)} className="bg-indigo-700 px-4 py-3 disabled:opacity-50"><Moon className="mr-2 inline" size={18} />进入夜晚</button>
                 <button onClick={startDay} disabled={loading || !["day_death_announce", "day_discuss"].includes(game.game.phase)} className="bg-indigo-600 px-4 py-3 disabled:opacity-50"><Moon className="mr-2 inline" size={18} />开始白天</button>
                 <button onClick={triggerAISpeeches} disabled={loading || game.game.phase !== "day_discuss"} className="bg-stone-700 px-4 py-3 disabled:opacity-50"><Bot className="mr-2 inline" size={18} />AI 发言</button>
+                <button onClick={startVote} disabled={loading || game.game.phase !== "day_discuss"} className="bg-amber-600 px-4 py-3 disabled:opacity-50"><Vote className="mr-2 inline" size={18} />进入投票</button>
                 <button onClick={() => targetSeat && submitVote(targetSeat)} disabled={loading || !targetSeat || game.game.phase !== "day_vote"} className="bg-amber-700 px-4 py-3 disabled:opacity-50"><Vote className="mr-2 inline" size={18} />投票</button>
                 <button onClick={resolveVotes} disabled={loading || game.game.phase !== "day_vote"} className="bg-red-700 px-4 py-3 disabled:opacity-50"><Vote className="mr-2 inline" size={18} />结算投票</button>
               </div>

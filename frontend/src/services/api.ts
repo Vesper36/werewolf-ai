@@ -106,6 +106,13 @@ export async function resolveVotes(gameId: string) {
   });
 }
 
+export async function startVote(gameId: string) {
+  return request<GameResponse>(`/api/games/${gameId}/vote/start`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 // ---- 特殊行动 ----
 
 export async function selfExplode(gameId: string, targetSeat: number | null) {

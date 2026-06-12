@@ -189,6 +189,15 @@ async def resolve_votes(game_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.post("/api/games/{game_id}/vote/start")
+async def start_vote(game_id: str) -> dict[str, Any]:
+    """从发言阶段切换到投票阶段"""
+    try:
+        return game_service.start_vote_phase(game_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 # ---- 特殊行动 ----
 
 @app.post("/api/games/{game_id}/self-explode")

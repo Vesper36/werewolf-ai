@@ -75,7 +75,7 @@ class GameRuntime:
     timeline: list[dict[str, Any]] = field(default_factory=list)
     pk_pending_seats: list[int] = field(default_factory=list)
     pending_human_prompt: str | None = None  # 等待人类玩家操作时的提示
-    pending_human_action_type: str | None = None  # "night_action" | "speech" | "vote" | "shoot" | "duel"
+    pending_human_action_type: str | None = None  # ActionType values: wolf_kill, seer_check, witch_save, etc.
     night_phase_index: int = 0  # 夜晚阶段进度：0=未开始, 1-99=阶段编号
     night_phases_queue: list[tuple[GamePhase, Role | None, ActionType | None]] = field(default_factory=list)
     police_elected: bool = False  # 警长是否已竞选
@@ -271,6 +271,12 @@ class GameService:
                     "player_id": player.id,
                 })
 
+        # 所有人发完言后自动进入投票阶段
+        if not unspoken and not any(
+            p.is_human and not p.has_spoken for p in state.get_alive_players()
+        ):
+            state.phase = GamePhase.DAY_VOTE
+
         return {**self.get_game(game_id), "new_speeches": [
             self._speech_to_dict(runtime, r) for r in records
         ]}
@@ -286,6 +292,14 @@ class GameService:
         self._record_human_vote(state, human, target)
         runtime.pending_human_prompt = None
         runtime.pending_human_action_type = None
+        return self.get_game(game_id)
+
+    def start_vote_phase(self, game_id: str) -> dict[str, Any]:
+        """从发言阶段切换到投票阶段"""
+        runtime = self._get_runtime(game_id)
+        state = runtime.state
+        if state.phase == GamePhase.DAY_DISCUSS:
+            state.phase = GamePhase.DAY_VOTE
         return self.get_game(game_id)
 
     async def resolve_votes(self, game_id: str) -> dict[str, Any]:
@@ -477,8 +491,8 @@ class GameService:
                 human = state.get_human_player()
                 if human and human.faction == Faction.WOLF:
                     runtime.pending_human_prompt = "选择今晚的袭击目标"
-                    runtime.pending_human_action_type = "night_action"
-                    return  # 暂停，等待人类狼人提交目标
+                    runtime.pending_human_action_type = "wolf_kill"
+                    return
                 await self._execute_wolf_kill(runtime)
 
             elif role is None:
@@ -488,7 +502,7 @@ class GameService:
                     if p.role in {Role.SEER, Role.PSYCHIC, Role.PURE_WHITE}:
                         if p.is_human:
                             runtime.pending_human_prompt = prompt_hint
-                            runtime.pending_human_action_type = "night_action"
+                            runtime.pending_human_action_type = "seer_check"
                             human_needs_act = True
                             break
                         await self._ai_night_action(runtime, p, action_type)
@@ -503,7 +517,7 @@ class GameService:
                         continue
                     if p.is_human:
                         runtime.pending_human_prompt = prompt_hint
-                        runtime.pending_human_action_type = "night_action"
+                        runtime.pending_human_action_type = action_type.value if action_type else "night_action"
                         human_needs_act = True
                         break
                     if action_type == ActionType.WITCH_SAVE:
@@ -565,7 +579,7 @@ class GameService:
                 runtime.pending_human_prompt = (
                     f"请选择{'查验' if 'check' in (action_type.value if action_type else '') else '行动'}目标"
                 )
-                runtime.pending_human_action_type = "night_action"
+                runtime.pending_human_action_type = action_type.value if action_type else "night_action"
                 return
             if action_type:
                 await self._ai_night_action(runtime, p, action_type)
@@ -802,13 +816,9 @@ class GameService:
             await self._run_police_election(runtime)
             runtime.police_elected = True
 
-        # 3. 发言阶段
+        # 3. 发言阶段（前端通过 run_ai_speeches / submit_human_speech 驱动）
         state.phase = GamePhase.DAY_DISCUSS
-        # 发言由前端通过 run_ai_speeches / submit_human_speech 驱动
-
-        # 4. 投票阶段
-        state.phase = GamePhase.DAY_VOTE
-        # 投票由前端通过 submit_human_vote / resolve_votes 驱动
+        # 不继续推进到投票阶段 — 前端在发言完毕后通过 resolve_votes 推进
 
     async def _run_police_election(self, runtime: GameRuntime) -> None:
         """警长竞选流程"""

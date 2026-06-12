@@ -37,6 +37,7 @@ type GameState = {
   submitSpeech: (text: string) => Promise<void>;
   submitVote: (targetSeat: number) => Promise<void>;
   resolveVotes: () => Promise<void>;
+  startVote: () => Promise<void>;
 
   // Special actions
   selfExplode: (targetSeat: number | null) => Promise<void>;
@@ -213,6 +214,20 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ game: result, status: "投票已结算" });
     } catch (err) {
       set({ status: err instanceof Error ? err.message : "结算失败" });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  startVote: async () => {
+    const { gameId } = get();
+    if (!gameId) return;
+    set({ loading: true });
+    try {
+      const result = await api.startVote(gameId);
+      set({ game: result, status: "进入投票阶段" });
+    } catch (err) {
+      set({ status: err instanceof Error ? err.message : "切换失败" });
     } finally {
       set({ loading: false });
     }
