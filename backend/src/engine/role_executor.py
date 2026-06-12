@@ -78,6 +78,8 @@ class PsychicExecutor(RoleExecutor):
 @RoleExecutorRegistry.register(Role.WITCH)
 class WitchExecutor(RoleExecutor):
     async def execute_night(self, state: GameState, player: Player, action: Action) -> None:
+        if action.action_type == ActionType.WITCH_SKIP:
+            return  # 跳过，不消耗药水
         if not player.has_antidote and not player.has_poison:
             return
         if action.action_type == ActionType.WITCH_SAVE:

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { useGameStore } from "@/stores/gameStore";
 import { gameSocket } from "@/services/websocket";
@@ -20,6 +20,7 @@ export default function GamePage() {
     triggerAISpeeches, submitSpeech, submitVote, resolveVotes,
     selfExplode, hunterShoot, knightDuel, status,
   } = useGameStore();
+  const [selectedSeat, setSelectedSeat] = useState<number | null>(null);
 
   useEffect(() => {
     if (gameId) fetchGame(gameId);
@@ -78,8 +79,8 @@ export default function GamePage() {
         {/* 圆桌 */}
         <GameTable
           game={game}
-          selectedSeat={null}
-          onSelectPlayer={() => {}}
+          selectedSeat={selectedSeat}
+          onSelectPlayer={(seat) => setSelectedSeat(seat === selectedSeat ? null : seat)}
         />
 
         {/* 发言区 */}

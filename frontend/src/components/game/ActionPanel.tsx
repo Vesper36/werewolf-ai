@@ -111,7 +111,7 @@ export default function ActionPanel({
               className="flex-1 py-3 bg-green-600 hover:bg-green-500 disabled:bg-gray-700 text-white rounded-xl font-medium transition-colors">
               {loading ? "提交中..." : "使用解药"}
             </button>
-            <button onClick={() => { onSubmitNightAction("witch_save", null); setSelectedTarget(null); }}
+            <button onClick={() => { onSubmitNightAction("witch_skip", null); }}
               disabled={loading}
               className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-xl font-medium transition-colors">
               不用
@@ -144,7 +144,7 @@ export default function ActionPanel({
               {loading ? "提交中..." : "确认"}
             </button>
             {isWitchPoison && (
-              <button onClick={() => { onSubmitNightAction("witch_save", null); setSelectedTarget(null); }}
+              <button onClick={() => { onSubmitNightAction("witch_skip", null); }}
                 disabled={loading}
                 className="py-3 px-5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-xl font-medium transition-colors">
                 不用

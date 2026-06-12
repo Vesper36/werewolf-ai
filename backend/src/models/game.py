@@ -56,6 +56,7 @@ class ActionType(str, Enum):
     WOLF_KILL = "wolf_kill"
     WITCH_SAVE = "witch_save"
     WITCH_POISON = "witch_poison"
+    WITCH_SKIP = "witch_skip"
     GUARD_PROTECT = "guard_protect"
     SEER_CHECK = "seer_check"
     PSYCHIC_CHECK = "psychic_check"
