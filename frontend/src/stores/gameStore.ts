@@ -7,6 +7,7 @@ type GameState = {
   boards: Board[];
   difficulty: Difficulty;
   selectedBoardId: string;
+  selectedRole: string | null;
   aiConfig: AIConfig;
 
   // Game state
@@ -20,6 +21,7 @@ type GameState = {
   // Actions
   setDifficulty: (d: Difficulty) => void;
   setSelectedBoardId: (id: string) => void;
+  setSelectedRole: (role: string | null) => void;
   setAiConfig: (config: Partial<AIConfig>) => void;
   setStatus: (s: string) => void;
 
@@ -60,6 +62,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   boards: [],
   difficulty: "expert",
   selectedBoardId: "",
+  selectedRole: null,
   aiConfig: { ...DEFAULT_AI },
 
   gameId: null,
@@ -70,6 +73,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setDifficulty: (d) => set({ difficulty: d }),
   setSelectedBoardId: (id) => set({ selectedBoardId: id }),
+  setSelectedRole: (role) => set({ selectedRole: role }),
   setAiConfig: (config) =>
     set((state) => ({ aiConfig: { ...state.aiConfig, ...config } })),
   setStatus: (s) => set({ status: s }),
@@ -97,7 +101,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         board_id: board.id,
         difficulty,
         human_name: "你",
-        human_role: humanRole,
+        human_role: get().selectedRole || humanRole,
         ai: aiConfig,
       });
       set({ game: result, gameId: result.game.game_id, status: "身份已发放" });

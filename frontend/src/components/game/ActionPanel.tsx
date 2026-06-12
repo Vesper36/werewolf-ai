@@ -93,10 +93,36 @@ export default function ActionPanel({
     const isSeer = humanRole === "seer" || humanRole === "psychic";
     const isWitch = humanRole === "witch";
     const isGuard = humanRole === "guard";
-    const needsTarget = isWolf || isSeer || isWitch || isGuard;
+    const isWitchSave = promptAction === "witch_save";
+    const isWitchPoison = promptAction === "witch_poison";
+    const needsTarget = isWolf || isSeer || isGuard || isWitchPoison;
 
-    // Show pending prompt
-    if (prompt && needsTarget) {
+    // Witch save: binary yes/no choice
+    if (prompt && isWitchSave) {
+      return (
+        <div className="bg-gray-800/80 rounded-2xl p-5 border border-indigo-700">
+          <div className="flex items-center gap-2 mb-4">
+            <Moon size={20} className="text-indigo-400" />
+            <h3 className="text-lg font-semibold text-gray-100">{prompt}</h3>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => { onSubmitNightAction("witch_save", null); }}
+              disabled={loading}
+              className="flex-1 py-3 bg-green-600 hover:bg-green-500 disabled:bg-gray-700 text-white rounded-xl font-medium transition-colors">
+              {loading ? "提交中..." : "使用解药"}
+            </button>
+            <button onClick={() => { onSubmitNightAction("witch_save", null); setSelectedTarget(null); }}
+              disabled={loading}
+              className="flex-1 py-3 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-xl font-medium transition-colors">
+              不用
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    // Witch poison or other roles needing a target
+    if (prompt && (needsTarget || isWitch)) {
       return (
         <div className="bg-gray-800/80 rounded-2xl p-5 border border-indigo-700">
           <div className="flex items-center gap-2 mb-4">
@@ -111,11 +137,20 @@ export default function ActionPanel({
               </button>
             ))}
           </div>
-          <button onClick={() => { onSubmitNightAction(promptAction ?? "wolf_kill", selectedTarget); setSelectedTarget(null); }}
-            disabled={loading || selectedTarget === null}
-            className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-xl font-medium transition-colors">
-            {loading ? "提交中..." : "确认"}
-          </button>
+          <div className="flex gap-3">
+            <button onClick={() => { onSubmitNightAction(promptAction ?? "wolf_kill", selectedTarget); setSelectedTarget(null); }}
+              disabled={loading || selectedTarget === null}
+              className="flex-1 py-3 bg-indigo-600 hover:bg-indigo-500 disabled:bg-gray-700 disabled:text-gray-500 text-white rounded-xl font-medium transition-colors">
+              {loading ? "提交中..." : "确认"}
+            </button>
+            {isWitchPoison && (
+              <button onClick={() => { onSubmitNightAction("witch_save", null); setSelectedTarget(null); }}
+                disabled={loading}
+                className="py-3 px-5 bg-gray-700 hover:bg-gray-600 text-gray-200 rounded-xl font-medium transition-colors">
+                不用
+              </button>
+            )}
+          </div>
         </div>
       );
     }

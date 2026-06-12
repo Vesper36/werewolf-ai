@@ -27,12 +27,14 @@ export default function Home() {
     boards,
     difficulty,
     selectedBoardId,
+    selectedRole,
     aiConfig,
     game,
     loading,
     status,
     setDifficulty,
     setSelectedBoardId,
+    setSelectedRole,
     setAiConfig,
     fetchBoards,
     createGame,
@@ -177,6 +179,22 @@ export default function Home() {
                   <span className="text-sm text-stone-400">{item.desc}</span>
                 </button>
               ))}
+
+              <div className="border-t border-stone-700 pt-3 mt-2">
+                <p className="text-xs text-stone-500 mb-2">选择角色</p>
+                <select className="w-full bg-stone-950 p-2 text-sm text-stone-100"
+                  value={selectedRole ?? ""}
+                  onChange={(e) => setSelectedRole(e.target.value || null)}>
+                  <option value="">随机角色</option>
+                  <option value="seer">预言家</option>
+                  <option value="witch">女巫</option>
+                  <option value="hunter">猎人</option>
+                  <option value="guard">守卫</option>
+                  <option value="knight">骑士</option>
+                  <option value="villager">村民</option>
+                  <option value="werewolf">狼人</option>
+                </select>
+              </div>
             </aside>
 
             <section className="border border-stone-800 bg-[#17191f] p-5">
