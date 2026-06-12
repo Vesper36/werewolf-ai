@@ -771,6 +771,15 @@ class GameService:
         state.witch_poison_target = None
         state.witch_save_target = None
         state.guard_target = None
+        # 保留查验结果到下一次夜晚前
+        if state.seer_check_target:
+            human = state.get_human_player()
+            target = state.get_player(state.seer_check_target) if state.seer_check_target else None
+            if target and human:
+                check_result = {"target_seat": target.seat_number, "result": "good" if state.seer_check_result else "wolf"}
+                if human.role == Role.PSYCHIC and target.role:
+                    check_result["role"] = target.role.value
+                state.last_check_result = check_result
         state.seer_check_target = None
         state.seer_check_result = None
         state.nightmare_block_target = None
@@ -1113,16 +1122,9 @@ class GameService:
     def _runtime_to_dict(self, runtime: GameRuntime) -> dict[str, Any]:
         state = runtime.state
         human = state.get_human_player()
-        role_result = None
-        if human and state.seer_check_target:
-            target = state.get_player(state.seer_check_target)
-            if target:
-                role_result = {
-                    "target_seat": target.seat_number,
-                    "result": "good" if state.seer_check_result else "wolf",
-                    "role": get_role_display_name(target.role)
-                    if human.role == Role.PSYCHIC and target.role else None,
-                }
+        role_result = state.last_check_result
+        if human and role_result and role_result.get("role"):
+            role_result["role"] = get_role_display_name(Role(role_result["role"]))
         return {
             "game": state.to_dict(),
             "board": self._board_to_dict(runtime.board),

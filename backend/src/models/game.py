@@ -176,6 +176,9 @@ class GameState:
     # 情侣
     lover_pairs: list[tuple[str, str]] = field(default_factory=list)  # [(a_id, b_id), ...]
 
+    # 预言家/通灵师查验结果（持久保留到下一次夜晚才清除）
+    last_check_result: dict | None = None  # {"target_seat": int, "result": "good"|"wolf", "role": str|None}
+
     # 投票
     vote_records: list[VoteRecord] = field(default_factory=list)
 

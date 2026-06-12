@@ -98,6 +98,15 @@ export default function GamePage() {
           </div>
         )}
 
+        {/* 查验结果 */}
+        {game.last_check && (
+          <div className="mb-3 border border-amber-700 bg-amber-950/40 p-3 text-sm text-amber-100">
+            查验结果：{game.last_check.target_seat}号 -
+            {game.last_check.result === "good" ? " 好人" : " 狼人"}
+            {game.last_check.role ? ` / ${game.last_check.role}` : ""}
+          </div>
+        )}
+
         {/* 操作面板 */}
         <ActionPanel
           game={game}
