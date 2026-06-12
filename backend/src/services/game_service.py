@@ -930,7 +930,6 @@ class GameService:
                 "text": f"{exiled.seat_number}号是白痴，翻牌免于放逐，但失去投票权。",
             })
             state.phase = GamePhase.NIGHT_START
-            state.vote_records = []
             state.day_number += 1
             return
 
@@ -971,7 +970,6 @@ class GameService:
             state.wolf_kill_target = None
             state.seer_check_target = None
             state.seer_check_result = None
-            state.vote_records = []
             for p in state.players:
                 p.has_voted = False
                 p.has_spoken = False
