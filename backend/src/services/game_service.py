@@ -179,7 +179,7 @@ class GameService:
         self, game_id: str, action_type: str, target_seat: int | None = None,
         second_target_seat: int | None = None,
     ) -> dict[str, Any]:
-        """人类玩家提交夜晚行动"""
+        """人类玩家提交夜晚行动，然后继续夜晚流程"""
         runtime = self._get_runtime(game_id)
         state = runtime.state
         human = state.get_human_player()
@@ -200,6 +200,10 @@ class GameService:
 
         runtime.pending_human_prompt = None
         runtime.pending_human_action_type = None
+
+        # 推进阶段索引并继续处理队列
+        runtime.night_phase_index += 1
+        await self._process_night_queue(runtime, first_night=state.is_first_night)
         return self.get_game(game_id)
 
     # ---- 白天流程 ----
@@ -625,6 +629,41 @@ class GameService:
         )
         await execute_night_action(state, player, action)
 
+    async def _ai_witch_action(self, runtime: GameRuntime, player: Player) -> None:
+        """AI女巫决策：是否救/毒"""
+        state = runtime.state
+        agent = runtime.agents.get(player.id)
+        if not agent:
+            return
+
+        visible = self._visible_state(runtime, player.id)
+        last_deaths = visible.get("last_deaths", [])
+
+        # 解药决策：有人被刀且女巫有解药
+        if player.has_antidote and state.wolf_kill_target:
+            # 简单策略：50%概率救（避免全救或全不救）
+            should_save = state.difficulty == "expert" or random.random() < 0.5
+            if should_save:
+                save_action = Action(
+                    player_id=player.id,
+                    action_type=ActionType.WITCH_SAVE,
+                )
+                await execute_night_action(state, player, save_action)
+                return
+
+        # 毒药决策：第二天以后，有压力位目标时
+        if player.has_poison and state.day_number > 1:
+            target_seat = agent.choose_night_target(visible)
+            if target_seat and random.random() < 0.3:  # 30%概率毒人
+                target = state.get_player_by_seat(target_seat)
+                if target and target.is_alive and target.faction != Faction.WOLF:
+                    poison_action = Action(
+                        player_id=player.id,
+                        action_type=ActionType.WITCH_POISON,
+                        target_id=target.id,
+                    )
+                    await execute_night_action(state, player, poison_action)
+
     async def _resolve_night_deaths(self, runtime: GameRuntime) -> None:
         """夜晚死亡结算"""
         state = runtime.state
@@ -759,8 +798,9 @@ class GameService:
                 runtime.timeline.append({"type": "system", "text": "天亮了。昨晚是平安夜。"})
 
         # 2. 警长竞选（首日且有警徽的局）
-        if state.is_first_night and runtime.board.has_police:
+        if not runtime.police_elected and runtime.board.has_police:
             await self._run_police_election(runtime)
+            runtime.police_elected = True
 
         # 3. 发言阶段
         state.phase = GamePhase.DAY_DISCUSS
@@ -1079,13 +1119,8 @@ class GameService:
             "last_check": role_result,
             "agents": [a.describe_publicly() for a in runtime.agents.values()],
             "provider": runtime.provider_config.masked(),
-            "pending_action": (
-                {
-                    "type": runtime.pending_human_action_type,
-                    "prompt": runtime.pending_human_prompt,
-                }
-                if runtime.pending_human_prompt else None
-            ),
+            "pending_human_prompt": runtime.pending_human_prompt,
+            "pending_human_action_type": runtime.pending_human_action_type,
         }
 
     def _player_to_dict_for_human(self, player: Player, human: Player | None) -> dict[str, Any]:

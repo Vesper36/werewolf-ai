@@ -37,11 +37,10 @@ async def test_offline_game_loop_generates_speeches_and_vote() -> None:
         board_id="novice_9_no_police",
         difficulty="novice",
         human_name="tester",
-        human_role="seer",
+        human_role="villager",  # 村民无夜间行动，夜晚可自动完成
         provider_config=AIProviderConfig(provider="offline"),
     )
     game_id = payload["game"]["game_id"]
-    # 使用新的首夜流程
     after_night = await game_service.process_first_night(game_id)
     phase = after_night["game"]["phase"]
     assert phase in {"day_discuss", "game_over"}, f"unexpected phase: {phase}"
@@ -53,7 +52,6 @@ async def test_offline_game_loop_generates_speeches_and_vote() -> None:
         p["seat_number"] for p in after_speech["players"]
         if p["is_alive"] and not p["is_human"]
     ]
-    # 人类投票
     game_service.submit_human_vote(game_id, alive_targets[0])
     after_vote = await game_service.resolve_votes(game_id)
     assert after_vote["game"]["phase"] in {"night_start", "game_over"}
