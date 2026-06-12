@@ -221,10 +221,18 @@ export default function Home() {
                   <option value="">选择目标座位</option>
                   {aliveTargets.map((player) => <option key={player.id} value={player.seat_number}>{player.seat_number}号 {player.name}</option>)}
                 </select>
-                <button onClick={() => startNight()} disabled={loading || game.game.phase === "game_over"} className="bg-indigo-700 px-4 py-3 disabled:opacity-50"><Moon className="mr-2 inline" size={18} />进入夜晚</button>
-                <button onClick={triggerAISpeeches} disabled={loading || game.game.phase === "game_over"} className="bg-stone-700 px-4 py-3 disabled:opacity-50"><Bot className="mr-2 inline" size={18} />AI 发言</button>
-                <button onClick={() => targetSeat && submitVote(targetSeat)} disabled={loading || !targetSeat || game.game.phase === "game_over"} className="bg-red-700 px-4 py-3 disabled:opacity-50"><Vote className="mr-2 inline" size={18} />投票</button>
+                <button onClick={() => startNight()} disabled={loading || !["role_dealt", "night_start"].includes(game.game.phase)} className="bg-indigo-700 px-4 py-3 disabled:opacity-50"><Moon className="mr-2 inline" size={18} />进入夜晚</button>
+                <button onClick={startDay} disabled={loading || !["day_death_announce", "day_discuss"].includes(game.game.phase)} className="bg-indigo-600 px-4 py-3 disabled:opacity-50"><Moon className="mr-2 inline" size={18} />开始白天</button>
+                <button onClick={triggerAISpeeches} disabled={loading || game.game.phase !== "day_discuss"} className="bg-stone-700 px-4 py-3 disabled:opacity-50"><Bot className="mr-2 inline" size={18} />AI 发言</button>
+                <button onClick={() => targetSeat && submitVote(targetSeat)} disabled={loading || !targetSeat || game.game.phase !== "day_vote"} className="bg-amber-700 px-4 py-3 disabled:opacity-50"><Vote className="mr-2 inline" size={18} />投票</button>
+                <button onClick={resolveVotes} disabled={loading || game.game.phase !== "day_vote"} className="bg-red-700 px-4 py-3 disabled:opacity-50"><Vote className="mr-2 inline" size={18} />结算投票</button>
               </div>
+
+              {game.pending_human_prompt && (
+                <div className="mt-3 border border-indigo-700 bg-indigo-950/40 p-3 text-sm text-indigo-200">
+                  {game.pending_human_prompt}
+                </div>
+              )}
 
               {game.last_check && (
                 <div className="mt-3 border border-amber-700 bg-amber-950/40 p-3 text-sm text-amber-100">
