@@ -1120,6 +1120,31 @@ class GameService:
             for r in state.speech_history[-24:]
         ]
         own_role = get_role_display_name(player.role) if player.role else "未知"
+
+        # 历史死亡记录（所有夜晚）
+        all_deaths = []
+        for i, nr in enumerate(state.night_results, 1):
+            for d in nr.deaths:
+                all_deaths.append({"night": i, "seat": d["seat_number"], "cause": d["cause"]})
+
+        # 被放逐玩家身份（公开信息）
+        eliminated = []
+        for d in state.day_deaths:
+            p = state.get_player(d["player_id"])
+            if p:
+                eliminated.append({"seat": p.seat_number, "cause": d["cause"]})
+
+        # 板子角色构成（只告诉AI有哪些角色存在，不告诉谁是谁）
+        board_roles = [get_role_display_name(Role(s.candidates[0])) for s in runtime.board.slots]
+
+        # AI预言家/通灵师自己的查验历史
+        my_checks = []
+        if player.role in {Role.SEER, Role.PSYCHIC, Role.PURE_WHITE} and state.last_check_result:
+            my_checks.append(state.last_check_result)
+
+        # 今日已发言座位
+        spoken_today = [r.player_id for r in state.speech_history if r.day_number == state.day_number]
+
         return {
             "game_id": state.game_id,
             "board": {"id": runtime.board.id, "name": runtime.board.name, "has_police": runtime.board.has_police},
@@ -1132,14 +1157,19 @@ class GameService:
                 "role": own_role,
                 "faction": player.faction.value if player.faction else None,
                 "is_sheriff": player.is_sheriff,
+                "my_checks": my_checks,
             },
             "alive_players": [p.to_public_dict() for p in state.get_alive_players()],
             "sheriff_seat": self._seat_for_id(state, state.sheriff_id),
             "last_deaths": last_deaths,
+            "all_deaths": all_deaths,
+            "eliminated_players": eliminated,
+            "board_roles": board_roles,
             "public_speeches": public_speeches,
             "vote_records": [
                 self._vote_to_dict(state, r) for r in state.vote_records[-24:]
             ],
+            "spoken_today_count": len(spoken_today),
         }
 
     def _runtime_to_dict(self, runtime: GameRuntime) -> dict[str, Any]:

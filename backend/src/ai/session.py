@@ -64,23 +64,25 @@ class AIAgentSession:
         }
 
     def _system_prompt(self) -> str:
-        role_name = get_role_display_name(self.role)
-        team_line = ""
-        if self.known_teammate_seats:
-            team_line = f"你按规则只知道这些狼队友座位：{self.known_teammate_seats}。"
-        base = (
-            "你是一个狼人杀 AI 玩家，但你不是裁判。你必须像真人玩家一样只基于自己可见的信息发言，"
-            "不能声称知道任何未公开身份，不能读取其他 AI 的私有思考。"
-            f"你的座位是 {self.seat_number} 号，底牌是 {role_name}，阵营是 {self.faction.value}。{team_line}"
-            f"你的固定人设是：{self.personality_name}，{self.personality_prompt}。"
+        """生成系统提示词：整合角色专属提示 + 人设 + JY策略"""
+        from .prompts.system import generate_role_prompt
+
+        teammates = self.known_teammate_seats if self.faction == Faction.WOLF else None
+        base = generate_role_prompt(
+            role=self.role,
+            faction=self.faction.value,
+            difficulty=self.difficulty,
+            teammate_seats=teammates,
+            personality=f"{self.personality_name}，{self.personality_prompt}",
+        )
+        base += (
+            f"\n\n你的座位是 {self.seat_number} 号。"
+            "你必须只基于自己可见的信息发言，不能声称知道任何未公开身份。"
+            "单次发言不超过220字，发言要自然口语化，允许少量停顿词。"
         )
         if self.difficulty == "expert":
             return self._expert_system_prompt(base)
-        return (
-            base
-            + DIFFICULTY_STYLE.get(self.difficulty, DIFFICULTY_STYLE['basic'])
-            + "发言要自然，有口语节奏，允许少量停顿词，但不要灌水。单次不超过 220 字。"
-        )
+        return base
 
     def _expert_role_tactics(self) -> str:
         """返回专家难度的角色特定战术指南"""
