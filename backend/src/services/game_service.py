@@ -76,6 +76,9 @@ class GameRuntime:
     pk_pending_seats: list[int] = field(default_factory=list)
     pending_human_prompt: str | None = None  # 等待人类玩家操作时的提示
     pending_human_action_type: str | None = None  # "night_action" | "speech" | "vote" | "shoot" | "duel"
+    night_phase_index: int = 0  # 夜晚阶段进度：0=未开始, 1-99=阶段编号
+    night_phases_queue: list[tuple[GamePhase, Role | None, ActionType | None]] = field(default_factory=list)
+    police_elected: bool = False  # 警长是否已竞选
 
 
 class GameService:
@@ -157,7 +160,7 @@ class GameService:
     # ---- 夜晚流程 ----
 
     async def process_first_night(self, game_id: str) -> dict[str, Any]:
-        """处理首夜（自动执行所有首夜专属阶段）"""
+        """处理首夜（自动执行所有首夜专属阶段，遇到人类玩家时暂停）"""
         runtime = self._get_runtime(game_id)
         if runtime.state.phase == GamePhase.GAME_OVER:
             return self.get_game(game_id)
@@ -399,35 +402,29 @@ class GameService:
     # ================================================================
 
     async def _run_first_night(self, runtime: GameRuntime) -> None:
-        """执行首夜：包含一次性角色阶段"""
+        """执行首夜：构建阶段队列，逐步处理，遇到人类玩家时暂停"""
         state = runtime.state
         state.phase = GamePhase.NIGHT_START
         state.day_number = 1
 
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_THIEF, Role.THIEF, ActionType.THIEF_CHOOSE)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_CUPID, Role.CUPID, ActionType.CUPID_LINK)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_LOVERS, None, None, is_lovers_meet=True)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_WILD_CHILD, Role.WILD_CHILD, ActionType.WILD_CHILD_CHOOSE)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_MECH_WOLF, Role.MECHANICAL_WOLF, ActionType.MECH_WOLF_LEARN)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_NIGHTMARE, Role.NIGHTMARE, ActionType.NIGHTMARE_BLOCK)
-        await self._execute_wolf_kill(runtime)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_WOLF_BEAUTY, Role.WOLF_BEAUTY, ActionType.WOLF_BEAUTY_CHARM)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_GARGOYLE, Role.GARGOYLE, ActionType.GARGOYLE_CHECK)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_WITCH, Role.WITCH, None)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_GUARD, Role.GUARD, ActionType.GUARD_PROTECT)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_SEER, None, None)  # seer + psychic
+        # 构建首夜阶段队列
+        queue: list[tuple[GamePhase, Role | None, ActionType | None, str]] = []
+        queue.append((GamePhase.NIGHT_WOLF_KILL, None, ActionType.WOLF_KILL, "选择袭击目标"))
+        queue.append((GamePhase.NIGHT_GARGOYLE, Role.GARGOYLE, ActionType.GARGOYLE_CHECK, "查验一名玩家"))
+        queue.append((GamePhase.NIGHT_WITCH, Role.WITCH, ActionType.WITCH_SAVE, "是否使用解药"))
+        queue.append((GamePhase.NIGHT_GUARD, Role.GUARD, ActionType.GUARD_PROTECT, "选择守护目标"))
+        queue.append((GamePhase.NIGHT_SEER, None, ActionType.SEER_CHECK, "选择查验目标"))
+        # 一次性角色（仅首夜）
+        if self._has_role_alive(state, Role.THIEF):
+            queue.append((GamePhase.NIGHT_THIEF, Role.THIEF, ActionType.THIEF_CHOOSE, "选择身份牌"))
+        if self._has_role_alive(state, Role.CUPID):
+            queue.append((GamePhase.NIGHT_CUPID, Role.CUPID, ActionType.CUPID_LINK, "选择情侣"))
+        if self._has_role_alive(state, Role.WILD_CHILD):
+            queue.append((GamePhase.NIGHT_WILD_CHILD, Role.WILD_CHILD, ActionType.WILD_CHILD_CHOOSE, "选择榜样"))
 
-        await self._resolve_night_deaths(runtime)
-        state.is_first_night = False
-
-        # 过渡到白天阶段
-        winner = WinChecker.check(state)
-        if winner:
-            state.winner = winner
-            state.phase = GamePhase.GAME_OVER
-            runtime.timeline.append({"type": "game_over", "text": f"{self._winner_label(winner)}获胜。"})
-        else:
-            state.phase = GamePhase.DAY_DISCUSS
+        runtime.night_phases_queue = queue
+        runtime.night_phase_index = 0
+        await self._process_night_queue(runtime, first_night=True)
 
     async def _run_night(self, runtime: GameRuntime) -> None:
         """执行非首夜"""
@@ -438,30 +435,88 @@ class GameService:
         for p in state.players:
             p.has_spoken = False
 
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_MECH_WOLF, Role.MECHANICAL_WOLF, ActionType.MECH_WOLF_LEARN)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_NIGHTMARE, Role.NIGHTMARE, ActionType.NIGHTMARE_BLOCK)
-        await self._execute_wolf_kill(runtime)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_WOLF_BEAUTY, Role.WOLF_BEAUTY, ActionType.WOLF_BEAUTY_CHARM)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_GARGOYLE, Role.GARGOYLE, ActionType.GARGOYLE_CHECK)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_WITCH, Role.WITCH, None)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_GUARD, Role.GUARD, ActionType.GUARD_PROTECT)
-        await self._execute_night_phase(runtime, GamePhase.NIGHT_SEER, None, None)
-
-        # 额外角色（根据板子动态判断）
+        queue: list[tuple[GamePhase, Role | None, ActionType | None, str]] = []
+        if self._has_role_alive(state, Role.MECHANICAL_WOLF):
+            queue.append((GamePhase.NIGHT_MECH_WOLF, Role.MECHANICAL_WOLF, ActionType.MECH_WOLF_LEARN, "选择学习目标"))
+        if self._has_role_alive(state, Role.NIGHTMARE):
+            queue.append((GamePhase.NIGHT_NIGHTMARE, Role.NIGHTMARE, ActionType.NIGHTMARE_BLOCK, "选择封锁目标"))
+        queue.append((GamePhase.NIGHT_WOLF_KILL, None, ActionType.WOLF_KILL, "选择袭击目标"))
+        if self._has_role_alive(state, Role.WOLF_BEAUTY):
+            queue.append((GamePhase.NIGHT_WOLF_BEAUTY, Role.WOLF_BEAUTY, ActionType.WOLF_BEAUTY_CHARM, "选择魅惑目标"))
+        if self._has_role_alive(state, Role.GARGOYLE):
+            queue.append((GamePhase.NIGHT_GARGOYLE, Role.GARGOYLE, ActionType.GARGOYLE_CHECK, "查验一名玩家"))
+        queue.append((GamePhase.NIGHT_WITCH, Role.WITCH, ActionType.WITCH_SAVE, "是否使用解药"))
+        queue.append((GamePhase.NIGHT_GUARD, Role.GUARD, ActionType.GUARD_PROTECT, "选择守护目标"))
+        queue.append((GamePhase.NIGHT_SEER, None, ActionType.SEER_CHECK, "选择查验目标"))
         if self._has_role_alive(state, Role.DREAM_WEAVER):
-            await self._execute_night_phase(runtime, GamePhase.NIGHT_SEER, Role.DREAM_WEAVER, ActionType.DREAM_WEAVER_TARGET)
+            queue.append((GamePhase.NIGHT_SEER, Role.DREAM_WEAVER, ActionType.DREAM_WEAVER_TARGET, "选择摄梦目标"))
         if self._has_role_alive(state, Role.CROW):
-            await self._execute_night_phase(runtime, GamePhase.NIGHT_CROW, Role.CROW, ActionType.CROW_CURSE)
+            queue.append((GamePhase.NIGHT_CROW, Role.CROW, ActionType.CROW_CURSE, "选择诅咒目标"))
         if self._has_role_alive(state, Role.MAGICIAN):
-            await self._execute_night_phase(runtime, GamePhase.NIGHT_MAGICIAN, Role.MAGICIAN, ActionType.MAGICIAN_SWAP)
-        if self._has_role_alive(state, Role.UNDERTAKER):
-            await self._execute_night_phase(runtime, GamePhase.NIGHT_SEER, Role.UNDERTAKER, ActionType.UNDERTAKER_CHECK)
-        if self._has_role_alive(state, Role.TREASURE_THIEF):
-            await self._execute_night_phase(runtime, GamePhase.NIGHT_SEER, Role.TREASURE_THIEF, ActionType.TREASURE_THIEF_SWITCH)
+            queue.append((GamePhase.NIGHT_MAGICIAN, Role.MAGICIAN, ActionType.MAGICIAN_SWAP, "选择交换目标"))
 
+        runtime.night_phases_queue = queue
+        runtime.night_phase_index = 0
+        await self._process_night_queue(runtime, first_night=False)
+
+    async def _process_night_queue(self, runtime: GameRuntime, first_night: bool) -> None:
+        """处理夜晚阶段队列：执行AI行动，遇到人类时暂停等待"""
+        state = runtime.state
+        queue = runtime.night_phases_queue
+
+        while runtime.night_phase_index < len(queue):
+            phase, role, action_type, prompt_hint = queue[runtime.night_phase_index]
+            state.phase = phase
+
+            if phase == GamePhase.NIGHT_WOLF_KILL:
+                # 狼人刀人：特殊处理
+                human = state.get_human_player()
+                if human and human.faction == Faction.WOLF:
+                    runtime.pending_human_prompt = "选择今晚的袭击目标"
+                    runtime.pending_human_action_type = "night_action"
+                    return  # 暂停，等待人类狼人提交目标
+                await self._execute_wolf_kill(runtime)
+
+            elif role is None:
+                # 复合阶段（如 Seer + Psychic + PureWhite）
+                human_needs_act = False
+                for p in state.get_alive_players():
+                    if p.role in {Role.SEER, Role.PSYCHIC, Role.PURE_WHITE}:
+                        if p.is_human:
+                            runtime.pending_human_prompt = prompt_hint
+                            runtime.pending_human_action_type = "night_action"
+                            human_needs_act = True
+                            break
+                        await self._ai_night_action(runtime, p, action_type)
+                if human_needs_act:
+                    return
+
+            else:
+                # 单角色阶段
+                human_needs_act = False
+                for p in state.get_alive_players():
+                    if p.role != role:
+                        continue
+                    if p.is_human:
+                        runtime.pending_human_prompt = prompt_hint
+                        runtime.pending_human_action_type = "night_action"
+                        human_needs_act = True
+                        break
+                    if action_type == ActionType.WITCH_SAVE:
+                        await self._ai_witch_action(runtime, p)
+                    elif action_type:
+                        await self._ai_night_action(runtime, p, action_type)
+                if human_needs_act:
+                    return
+
+            runtime.night_phase_index += 1
+
+        # 所有阶段处理完毕，结算夜晚死亡
         await self._resolve_night_deaths(runtime)
+        if first_night:
+            state.is_first_night = False
 
-        # 过渡到白天阶段
+        # 过渡到白天
         winner = WinChecker.check(state)
         if winner:
             state.winner = winner
