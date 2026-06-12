@@ -35,6 +35,7 @@ type GameState = {
 
   // Day flow
   startDay: () => Promise<void>;
+  continueDay: () => Promise<void>;
   triggerAISpeeches: () => Promise<void>;
   submitSpeech: (text: string) => Promise<void>;
   submitVote: (targetSeat: number) => Promise<void>;
@@ -162,6 +163,20 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ game: result, status: "进入白天" });
     } catch (err) {
       set({ status: err instanceof Error ? err.message : "白天开始失败" });
+    } finally {
+      set({ loading: false });
+    }
+  },
+
+  continueDay: async () => {
+    const { gameId } = get();
+    if (!gameId) return;
+    set({ loading: true });
+    try {
+      const result = await api.continueDay(gameId);
+      set({ game: result, status: "进入发言阶段" });
+    } catch (err) {
+      set({ status: err instanceof Error ? err.message : "继续失败" });
     } finally {
       set({ loading: false });
     }

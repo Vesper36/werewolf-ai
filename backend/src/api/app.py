@@ -153,6 +153,15 @@ async def start_day(game_id: str) -> dict[str, Any]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.post("/api/games/{game_id}/day/continue")
+async def continue_day(game_id: str) -> dict[str, Any]:
+    """从死讯宣布继续到发言阶段"""
+    try:
+        return await game_service.continue_to_discuss(game_id)
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @app.post("/api/games/{game_id}/speech")
 async def human_speech(game_id: str, payload: SpeechRequest) -> dict[str, Any]:
     """人类玩家提交发言"""

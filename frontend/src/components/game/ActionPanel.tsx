@@ -11,6 +11,7 @@ type Props = {
   onSubmitNightAction: (actionType: string, targetSeat: number | null) => void;
   onStartDay: () => void;
   onStartVote: () => void;
+  onContinueDay: () => void;
   onTriggerAI: () => void;
   onSubmitSpeech: (text: string) => void;
   onSubmitVote: (targetSeat: number) => void;
@@ -278,11 +279,14 @@ export default function ActionPanel({
 
   // ---- Death announce ----
   if (phase === "day_death_announce") {
+    const lastDeath = game.timeline?.filter(t => t.type === "death").pop();
+    const lastSystem = game.timeline?.filter(t => t.type === "system" && t.text?.startsWith("天亮")).pop();
+    const deathInfo = lastDeath?.text ?? lastSystem?.text ?? "等待公布死讯";
     return (
       <div className="bg-gray-800/80 rounded-2xl p-6 border border-gray-700 text-center">
         <Skull size={32} className="text-gray-400 mx-auto mb-3" />
-        <p className="text-gray-300 text-lg">{game.phase_label}</p>
-        <button onClick={onStartDay} disabled={loading}
+        <p className="text-gray-300 text-lg">{deathInfo}</p>
+        <button onClick={onContinueDay} disabled={loading}
           className="mt-4 px-6 py-2 bg-amber-600 hover:bg-amber-500 disabled:bg-gray-700 text-white rounded-xl text-sm transition-colors">
           继续
         </button>

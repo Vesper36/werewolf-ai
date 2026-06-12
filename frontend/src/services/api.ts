@@ -78,6 +78,13 @@ export async function startDay(gameId: string) {
   });
 }
 
+export async function continueDay(gameId: string) {
+  return request<GameResponse>(`/api/games/${gameId}/day/continue`, {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 export async function runAiSpeeches(gameId: string) {
   return request<GameResponse>(`/api/games/${gameId}/ai-speeches`, {
     method: "POST",

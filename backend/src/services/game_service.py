@@ -850,14 +850,19 @@ class GameService:
             else:
                 runtime.timeline.append({"type": "system", "text": "天亮了。昨晚是平安夜。"})
 
-        # 2. 警长竞选（首日且有警徽的局）
+    async def continue_to_discuss(self, game_id: str) -> dict[str, Any]:
+        """从死讯宣布继续到发言阶段"""
+        runtime = self._get_runtime(game_id)
+        state = runtime.state
+
+        # 警长竞选（首日且有警徽的局）
         if not runtime.police_elected and runtime.board.has_police:
             await self._run_police_election(runtime)
             runtime.police_elected = True
 
-        # 3. 发言阶段（前端通过 run_ai_speeches / submit_human_speech 驱动）
+        # 进入发言阶段
         state.phase = GamePhase.DAY_DISCUSS
-        # 不继续推进到投票阶段 — 前端在发言完毕后通过 resolve_votes 推进
+        return self.get_game(game_id)
 
     async def _run_police_election(self, runtime: GameRuntime) -> None:
         """警长竞选流程"""
