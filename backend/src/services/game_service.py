@@ -320,7 +320,9 @@ class GameService:
                 continue
             visible = self._visible_state(runtime, player.id)
             visible["pressure_seats"] = pressure
-            ai_target_seat = agent.choose_vote(visible)
+            ai_target_seat = await agent.choose_vote_llm(
+                visible, runtime.provider_config, runtime.llm,
+            )
             ai_target = state.get_player_by_seat(ai_target_seat)
             if ai_target and ai_target.is_alive:
                 total_records.append(VoteRecord(
@@ -449,9 +451,13 @@ class GameService:
         state = runtime.state
         state.phase = GamePhase.NIGHT_START
 
-        # 重置发言标记
+        # 重置发言标记和临时状态
         for p in state.players:
             p.has_spoken = False
+            p.dream_blocked = False
+            p.nightmare_blocked = False
+            p.cursed_by_crow = False
+            p.charmed_by_beauty = False
 
         queue: list[tuple[GamePhase, Role | None, ActionType | None, str]] = []
         if self._has_role_alive(state, Role.MECHANICAL_WOLF):
@@ -607,7 +613,9 @@ class GameService:
             if not agent:
                 continue
             visible = self._visible_state(runtime, wolf.id)
-            target_seat = agent.choose_night_target(visible)
+            target_seat = await agent.choose_night_target_llm(
+                visible, runtime.provider_config, runtime.llm,
+            )
             if target_seat:
                 target = state.get_player_by_seat(target_seat)
                 if target and target.is_alive and target.faction != Faction.WOLF:
@@ -620,14 +628,16 @@ class GameService:
     async def _ai_night_action(
         self, runtime: GameRuntime, player: Player, action_type: ActionType,
     ) -> None:
-        """AI自动执行夜晚行动"""
+        """AI自动执行夜晚行动（优先LLM，降级到离线策略）"""
         state = runtime.state
         agent = runtime.agents.get(player.id)
         if not agent:
             return
 
         visible = self._visible_state(runtime, player.id)
-        target_seat = agent.choose_night_target(visible)
+        target_seat = await agent.choose_night_target_llm(
+            visible, runtime.provider_config, runtime.llm,
+        )
 
         if target_seat is None:
             return
@@ -667,7 +677,9 @@ class GameService:
 
         # 毒药决策：第二天以后，有压力位目标时
         if player.has_poison and state.day_number > 1:
-            target_seat = agent.choose_night_target(visible)
+            target_seat = await agent.choose_night_target_llm(
+                visible, runtime.provider_config, runtime.llm,
+            )
             if target_seat and random.random() < 0.3:  # 30%概率毒人
                 target = state.get_player_by_seat(target_seat)
                 if target and target.is_alive and target.faction != Faction.WOLF:

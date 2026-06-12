@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Bot, Crown, Gauge, Mic, Moon, Play, Radio, Send, Settings, Shield, ShieldQuestion, Star, Swords, Zap } from "lucide-react";
+import { Bot, Crown, Gauge, Mic, Moon, Play, Radio, Send, Settings, Shield, ShieldQuestion, Star, Swords, Vote, Zap } from "lucide-react";
 import PlayerCard from "@/components/game/PlayerCard";
 import SpeechBubble from "@/components/game/SpeechBubble";
 import Timeline from "@/components/game/Timeline";
@@ -185,7 +185,7 @@ export default function Home() {
                   <p className="text-sm uppercase text-red-400">Board Workshop</p>
                   <h2 className="text-4xl font-semibold">选择今晚的板子</h2>
                 </div>
-                <button onClick={createGame} disabled={!selectedBoard || loading} className="bg-red-700 px-4 py-3 font-medium hover:bg-red-600 disabled:opacity-50">
+                <button onClick={handleStartGame} disabled={!selectedBoard || loading} className="bg-red-700 px-4 py-3 font-medium hover:bg-red-600 disabled:opacity-50">
                   <Play className="mr-2 inline" size={18} />
                   开始游戏
                 </button>
