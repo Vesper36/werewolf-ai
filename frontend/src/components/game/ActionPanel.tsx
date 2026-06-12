@@ -26,6 +26,7 @@ export default function ActionPanel({
   onStartNight,
   onSubmitNightAction,
   onStartDay,
+  onStartVote,
   onTriggerAI,
   onSubmitSpeech,
   onSubmitVote,

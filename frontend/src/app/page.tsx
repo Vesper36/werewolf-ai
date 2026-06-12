@@ -173,12 +173,26 @@ export default function Home() {
         {!game ? (
           <main className="grid gap-5 lg:grid-cols-[210px_minmax(0,1fr)_360px]">
             <aside className="grid content-start gap-3">
-              {DIFFICULTIES.map((item) => (
-                <button key={item.id} onClick={() => setDifficulty(item.id)} className={`border p-4 text-left ${difficulty === item.id ? "border-red-500 bg-red-950/40" : "border-stone-800 bg-[#17191f]"}`}>
-                  <strong className="block text-xl">{item.title}</strong>
-                  <span className="text-sm text-stone-400">{item.desc}</span>
-                </button>
-              ))}
+              {DIFFICULTIES.map((item) => {
+  const c = CL[item.color] || CL.emerald;
+  const isActive = difficulty === item.id;
+  return (
+    <button key={item.id} onClick={() => setDifficulty(item.id)}
+      className={`border p-4 text-left transition-all duration-200 ${
+        isActive
+          ? `${c.border} ${c.bg} ring-1 ${c.ring}`
+          : "border-stone-800 bg-[#17191f] hover:border-stone-600"
+      }`}>
+      <div className="flex items-center gap-3 mb-1">
+        <item.Icon size={20} className={isActive ? c.text : "text-stone-500"} />
+        <strong className="text-xl">{item.title}</strong>
+        <span className={`ml-auto text-xs px-2 py-0.5 rounded ${isActive ? c.bg : "bg-stone-800"} ${c.text}`}>{item.players}</span>
+        {item.police && <span className="text-xs text-amber-400">警长</span>}
+      </div>
+      <span className="text-sm text-stone-400">{item.desc}</span>
+    </button>
+  );
+})}
 
               <div className="border-t border-stone-700 pt-3 mt-2">
                 <p className="text-xs text-stone-500 mb-2">选择角色</p>
@@ -210,12 +224,29 @@ export default function Home() {
               </div>
               <div className="grid gap-3">
                 {filteredBoards.map((board) => (
-                  <button key={board.id} onClick={() => setSelectedBoardId(board.id)} className={`grid gap-1 border p-4 text-left ${board.id === selectedBoardId ? "border-red-500 bg-stone-950" : "border-stone-800 bg-stone-900/70"}`}>
-                    <strong className="text-lg">{board.name}</strong>
-                    <span className="text-sm leading-6 text-stone-400">{board.description}</span>
-                    <small className="text-stone-500">{board.player_count}人 / {board.has_police ? "带上警" : "不上警"}</small>
-                  </button>
-                ))}
+  <button key={board.id} onClick={() => setSelectedBoardId(board.id)}
+    className={`border p-4 text-left transition-all ${
+      board.id === selectedBoardId
+        ? "border-red-500 bg-stone-950"
+        : "border-stone-800 bg-stone-900/70 hover:border-stone-600"
+    }`}>
+    <div className="flex items-start justify-between gap-2">
+      <strong className="text-lg">{board.name}</strong>
+      <div className="flex gap-1.5">
+        <span className="text-xs bg-stone-800 px-1.5 py-0.5 rounded">{board.player_count}人</span>
+        {board.has_police && <span className="text-xs bg-amber-900/50 text-amber-400 px-1.5 py-0.5 rounded">警长</span>}
+      </div>
+    </div>
+    <span className="text-sm leading-6 text-stone-400 mt-1 block">{board.description}</span>
+    <div className="flex flex-wrap gap-1 mt-2">
+      {Object.entries(board.role_counts).map(([role, count]) => (
+        <span key={role} className="text-[11px] bg-stone-800/80 text-stone-400 px-1.5 py-0.5 rounded">
+          {role}{count > 1 ? `x${count}` : ""}
+        </span>
+      ))}
+    </div>
+  </button>
+))}
               </div>
             </section>
 
