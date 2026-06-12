@@ -10,6 +10,7 @@ type Props = {
   onStartNight: () => void;
   onSubmitNightAction: (actionType: string, targetSeat: number | null) => void;
   onStartDay: () => void;
+  onStartVote: () => void;
   onTriggerAI: () => void;
   onSubmitSpeech: (text: string) => void;
   onSubmitVote: (targetSeat: number) => void;
@@ -221,7 +222,7 @@ export default function ActionPanel({
               className="px-5 py-3 bg-gray-700 hover:bg-gray-600 disabled:bg-gray-800 text-gray-200 rounded-xl text-sm transition-colors flex items-center gap-2">
               <Bot size={16} />AI 发言
             </button>
-            <button onClick={onStartDay} disabled={loading}
+            <button onClick={onStartVote} disabled={loading}
               className="px-5 py-3 bg-amber-700 hover:bg-amber-600 disabled:bg-gray-800 text-white rounded-xl text-sm transition-colors flex items-center gap-2">
               <Vote size={16} />进入投票
             </button>

@@ -16,7 +16,7 @@ export default function GamePage() {
   const gameId = params.id as string;
   const {
     game, loading, fetchGame,
-    startNight, submitNightAction, startDay,
+    startNight, submitNightAction, startDay, startVote,
     triggerAISpeeches, submitSpeech, submitVote, resolveVotes,
     selfExplode, hunterShoot, knightDuel, status,
   } = useGameStore();
@@ -115,6 +115,7 @@ export default function GamePage() {
           onStartNight={() => startNight()}
           onSubmitNightAction={(aType, seat) => submitNightAction(aType, seat)}
           onStartDay={() => startDay()}
+          onStartVote={() => startVote()}
           onTriggerAI={() => triggerAISpeeches()}
           onSubmitSpeech={(text) => submitSpeech(text)}
           onSubmitVote={(seat) => submitVote(seat)}

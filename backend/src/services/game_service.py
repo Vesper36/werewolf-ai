@@ -495,11 +495,13 @@ class GameService:
             state.phase = phase
 
             if phase == GamePhase.NIGHT_WOLF_KILL:
-                # 狼人刀人：特殊处理（石像鬼/隐狼/机械狼不参与刀人）
+                # 狼人刀人：先收集AI狼人投票，再暂停等待人类
                 human = state.get_human_player()
                 if human and human.faction == Faction.WOLF and human.role not in {
                     Role.GARGOYLE, Role.HIDDEN_WOLF, Role.MECHANICAL_WOLF,
                 }:
+                    # 先执行AI狼人投票（人类狼的票会在submit后加入）
+                    await self._execute_wolf_kill(runtime)
                     runtime.pending_human_prompt = "选择今晚的袭击目标"
                     runtime.pending_human_action_type = "wolf_kill"
                     return

@@ -185,6 +185,7 @@ class PureWhiteExecutor(RoleExecutor):
     async def execute_night(self, state: GameState, player: Player, action: Action) -> None:
         if action.action_type not in {ActionType.PURE_WHITE_CHECK, ActionType.SEER_CHECK}:
             return
+        if not action.target_id:
             return
         target = state.get_player(action.target_id)
         if not target or not target.is_alive:
