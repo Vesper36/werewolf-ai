@@ -1101,6 +1101,18 @@ class GameService:
                 difficulty=difficulty,
                 known_teammate_seats=teammate_seats,
             )
+
+        # 狼队战术分配
+        from ..ai.strategy.tactics import assign_tactics
+        wolf_list = [
+            {"id": p.id, "seat": p.seat_number, "role": p.role.value if p.role else ""}
+            for p in wolves
+        ]
+        tactics = assign_tactics(wolf_list, difficulty)
+        for player_id, tactic in tactics.items():
+            if player_id in agents:
+                agents[player_id].assigned_tactic = tactic.name
+
         return agents
 
     @staticmethod
