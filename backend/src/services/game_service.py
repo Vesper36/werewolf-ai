@@ -672,19 +672,19 @@ class GameService:
         await execute_night_action(state, player, action)
 
     async def _ai_witch_action(self, runtime: GameRuntime, player: Player) -> None:
-        """AI女巫决策：是否救/毒"""
+        """AI女巫决策：LLM驱动是否救/毒，失败时降级到随机策略"""
         state = runtime.state
         agent = runtime.agents.get(player.id)
         if not agent:
             return
 
         visible = self._visible_state(runtime, player.id)
-        last_deaths = visible.get("last_deaths", [])
 
-        # 解药决策：有人被刀且女巫有解药
+        # --- 解药决策：有人被刀且女巫有解药 ---
         if player.has_antidote and state.wolf_kill_target:
-            # 简单策略：50%概率救（避免全救或全不救）
-            should_save = state.difficulty == "expert" or random.random() < 0.5
+            should_save = await self._witch_decide_save(
+                runtime, player, visible,
+            )
             if should_save:
                 save_action = Action(
                     player_id=player.id,
@@ -693,20 +693,99 @@ class GameService:
                 await execute_night_action(state, player, save_action)
                 return
 
-        # 毒药决策：第二天以后，有压力位目标时
+        # --- 毒药决策：第二天以后，有目标时 ---
         if player.has_poison and state.day_number > 1:
             target_seat = await agent.choose_night_target_llm(
                 visible, runtime.provider_config, runtime.llm,
             )
-            if target_seat and random.random() < 0.3:  # 30%概率毒人
+            if target_seat:
                 target = state.get_player_by_seat(target_seat)
                 if target and target.is_alive and target.faction != Faction.WOLF:
-                    poison_action = Action(
-                        player_id=player.id,
-                        action_type=ActionType.WITCH_POISON,
-                        target_id=target.id,
+                    should_poison = await self._witch_decide_poison(
+                        runtime, player, visible, target_seat,
                     )
-                    await execute_night_action(state, player, poison_action)
+                    if should_poison:
+                        poison_action = Action(
+                            player_id=player.id,
+                            action_type=ActionType.WITCH_POISON,
+                            target_id=target.id,
+                        )
+                        await execute_night_action(state, player, poison_action)
+
+    # ---- 女巫 LLM 决策子方法 ----
+
+    async def _witch_decide_save(
+        self, runtime: GameRuntime, player: Player, visible: dict[str, Any],
+    ) -> bool:
+        """LLM 判断是否使用解药救人。失败时降级到专家模式必救/其他50%随机。"""
+        if not runtime.provider_config.enabled:
+            return runtime.state.difficulty == "expert" or random.random() < 0.5
+
+        killed_player = runtime.state.get_player(runtime.state.wolf_kill_target)
+        killed_seat = killed_player.seat_number if killed_player else "未知"
+        day = runtime.state.day_number
+
+        system = (
+            "你是狼人杀中的女巫。当前夜晚有人被狼人杀害，你需要决定是否使用解药救人。\n"
+            "规则：解药整局只能用一次。第一晚可能狼自刀。\n"
+            "请只回复一个词：\"救\" 表示使用解药，\"不救\" 表示不用。不要回复其他内容。"
+        )
+        user = (
+            f"第{day}天夜晚，{killed_seat}号玩家被狼人杀害。\n"
+            f"你的身份：{player.seat_number}号女巫。\n"
+            f"难度：{runtime.state.difficulty}。\n"
+            "你是否使用解药？(救/不救)"
+        )
+
+        try:
+            response = await runtime.llm.chat(
+                runtime.provider_config,
+                [{"role": "system", "content": system},
+                 {"role": "user", "content": user}],
+                max_tokens=20,
+            )
+            return "救" in response or "save" in response.lower() or "yes" in response.lower()
+        except Exception:
+            # 降级：专家模式必救，其他模式 50%
+            return runtime.state.difficulty == "expert" or random.random() < 0.5
+
+    async def _witch_decide_poison(
+        self,
+        runtime: GameRuntime,
+        player: Player,
+        visible: dict[str, Any],
+        target_seat: int,
+    ) -> bool:
+        """LLM 判断是否使用毒药。失败时降级到 30% 随机。"""
+        if not runtime.provider_config.enabled:
+            return random.random() < 0.3
+
+        day = runtime.state.day_number
+
+        system = (
+            "你是狼人杀中的女巫。你需要决定是否对某个玩家使用毒药。\n"
+            "规则：毒药整局只能用一次，误毒好人代价极大。通常只在高度确信目标是狼时才用。\n"
+            "请只回复一个词：\"毒\" 表示使用毒药，\"不毒\" 表示不用。不要回复其他内容。"
+        )
+        user = (
+            f"第{day}天夜晚，你考虑对 {target_seat} 号玩家使用毒药。\n"
+            f"你的身份：{player.seat_number}号女巫。\n"
+            f"难度：{runtime.state.difficulty}。\n"
+            f"当前场况摘要：场上存活{len(visible.get('alive_players', []))}人，"
+            f"历史死亡：{visible.get('all_deaths', [])}。\n"
+            "你是否使用毒药？(毒/不毒)"
+        )
+
+        try:
+            response = await runtime.llm.chat(
+                runtime.provider_config,
+                [{"role": "system", "content": system},
+                 {"role": "user", "content": user}],
+                max_tokens=20,
+            )
+            return "毒" in response or "poison" in response.lower() or "yes" in response.lower()
+        except Exception:
+            return random.random() < 0.3
 
     async def _resolve_night_deaths(self, runtime: GameRuntime) -> None:
         """夜晚死亡结算"""
